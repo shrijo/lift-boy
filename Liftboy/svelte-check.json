@@ -1,0 +1,17 @@
+Loading svelte-check in workspace: /Users/shrijo/Documents/GitHub/lift-boy/Liftboy
+Getting Svelte diagnostics...
+
+/Users/shrijo/Documents/GitHub/lift-boy/Liftboy/node_modules/esrap/types/index.d.ts:72:32
+Error: Cannot find module '@typescript-eslint/types' or its corresponding type declarations. 
+declare module 'esrap/languages/ts' {
+	import type { TSESTree } from '@typescript-eslint/types';
+	import type { Context } from 'esrap';
+
+/Users/shrijo/Documents/GitHub/lift-boy/Liftboy/node_modules/esrap/types/index.d.ts:128:32
+Error: Cannot find module '@typescript-eslint/types' or its corresponding type declarations. 
+declare module 'esrap/languages/tsx' {
+	import type { TSESTree } from '@typescript-eslint/types';
+	import type { Context } from 'esrap';
+
+====================================
+svelte-check found 2 errors and 0 warnings in 1 file
