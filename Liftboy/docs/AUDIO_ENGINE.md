@@ -41,28 +41,63 @@ Svelte Stores (lanes, bpm)
 ```typescript
 interface LaneRuntime {
   // Identity
-  laneId: string;
-  laneIndex: number;
+  id: string;
+
+  // Module type tracking
+  rhythmModuleId: string;     // e.g., "rhythm.xox-basic" | "rhythm.euclidean" | "rhythm.m185"
+  melodyModuleId: string;     // e.g., "melody.melody-basic" | "melody.stochastic"
+  instrumentModuleId: string; // e.g., "instrument.synth-simple" | "instrument.kick" | "instrument.hihat"
+  effectModuleIds: string[];  // e.g., ["effect.delay"], ["effect.reverb"], []
 
   // Audio nodes
-  synth: Tone.FMSynth;        // Tone.js FM synthesizer
-  gainNode: Tone.Gain;        // Volume control
-  pannerNode: Tone.Panner;    // Stereo panning
+  synth: Tone.FMSynth | Tone.MembraneSynth | Tone.MetalSynth | Tone.NoiseSynth | null; // Synthesizer (type varies by instrument)
+  delayNode: Tone.FeedbackDelay | null; // Delay effect (optional)
+  reverbNode: Tone.Reverb | null;       // Reverb effect (optional)
+  gain: Tone.Gain | null;               // Volume control
+  pan: Tone.Panner | null;              // Stereo panning
 
   // Timing
   loop: Tone.Loop | null;     // Subdivision-based timing loop
+  subdivision: string;        // e.g., "16n"
+
+  // Rhythm module states (module-specific)
+  steps: StepState[];           // XOX sequencer
+  sequencer: SequencerSettings; // XOX settings
+  euclideanSteps: number;       // Euclidean total steps
+  euclideanPulses: number;      // Euclidean pulse count
+  euclideanRotation: number;    // Euclidean rotation offset
+  euclideanSettings: {...};     // Euclidean settings
+  m185Entries: M185Entry[];     // M185 entries
+  m185Settings: {...};          // M185 settings
+
+  // Melody module states
+  bars: BarState[];             // Basic melody
+  melody: MelodySettings;       // Basic melody settings
+  stochasticMinNote: number;    // Stochastic range min
+  stochasticMaxNote: number;    // Stochastic range max
+  stochasticChangeProb: number; // Stochastic change probability
+  stochasticCurrentNote: number; // Stochastic current note
+
+  // Instrument states (module-specific)
+  synthState: SynthState;       // FM synth
+  kickState: KickState;         // Kick drum
+  hihatState: HihatState;       // Hi-hat
+  snareState: SnareState;       // Snare drum
+  congaState: CongaState;       // Conga drum
+  clapState: ClapState;         // Hand clap
+
+  // Effect states
+  delayState: DelaySnapshot;
+  reverbState: ReverbSnapshot;
+
+  // Playback pointers
   stepPointer: number;        // Current step in rhythm pattern
   melodyPointer: number;      // Current bar in melody sequence
-
-  // State snapshots
-  sequencer: SequencerSnapshot;
-  melody: MelodySnapshot;
-  synth: SynthSnapshot;
-  steps: StepState[];
-  bars: BarState[];
+  triggerCounter: number;     // For melody skip logic
 
   // Mixer settings
-  mixer: { volume, pan, mode }
+  mixer: LaneMixer;
+  mode: LaneMode;
 }
 ```
 
@@ -93,11 +128,56 @@ const loop = new Tone.Loop((time) => {
 - BPM set globally on transport
 - Loops fire in sync despite different subdivisions
 
-### 3. Pointers
+### 3. Module-Aware Dispatching
+
+**Purpose**: Route audio processing to the correct handler based on active module type.
+
+**Dispatcher Pattern**:
+```typescript
+function tickLane(runtime: LaneRuntime, time: number) {
+  if (!shouldPlayLane(runtime)) return;
+
+  // Dispatch to appropriate rhythm handler
+  if (runtime.rhythmModuleId === "rhythm.euclidean") {
+    tickLaneEuclidean(runtime, time);
+  } else if (runtime.rhythmModuleId === "rhythm.m185") {
+    tickLaneM185(runtime, time);
+  } else {
+    // Default: XOX sequencer
+    tickLaneXox(runtime, time);
+  }
+}
+
+function triggerLaneMelody(runtime: LaneRuntime, step: StepState, time: number) {
+  // Dispatch to appropriate melody handler
+  if (runtime.melodyModuleId === "melody.stochastic") {
+    triggerLaneMelodyStochastic(runtime, step, time);
+  } else {
+    // Default: Basic melody sequencer
+    triggerLaneMelodyBasic(runtime, step, time);
+  }
+}
+```
+
+**Module Handlers**:
+- `tickLaneXox()` - XOX step sequencer logic
+- `tickLaneEuclidean()` - Bjorklund algorithm generation
+- `tickLaneM185()` - Entry-based sequencing
+- `triggerLaneMelodyBasic()` - 32-bar melody sequencer
+- `triggerLaneMelodyStochastic()` - Random note generation
+
+**Audio Chain**:
+```
+Synth → [Delay (optional)] → [Reverb (optional)] → Gain → Pan → Destination
+```
+
+Effect nodes are created conditionally based on `effectModuleIds`.
+
+### 4. Pointers
 
 **Step Pointer**: Tracks current position in rhythm pattern
 - Advances on each tick
-- Wraps at `sequencer.length`
+- Wraps based on module type (XOX: at `sequencer.length`, Euclidean: at `euclideanSteps`)
 - Respects playback order (forward, backward, random)
 
 **Melody Pointer**: Tracks current position in bar sequence
@@ -212,46 +292,194 @@ runtime.bars = sanitizeBars(runtime.melody.bars);
 
 **Node Creation**:
 ```typescript
-if (!runtime.synth) {
-  runtime.synth = new Tone.FMSynth({
-    oscillator: { type: 'sine' },
-    envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.8 },
-    modulation: { type: 'sine' },
-    harmonicity: 1,
-    modulationIndex: 2
-  });
-}
+async function ensureLaneNodes(runtime: LaneRuntime) {
+  if (runtime.synth) return; // Already initialized
 
-if (!runtime.gainNode) {
-  runtime.gainNode = new Tone.Gain(0.8);
-  runtime.synth.connect(runtime.gainNode);
-}
+  // Create synth based on instrument module type
+  if (runtime.instrumentModuleId === "instrument.kick") {
+    runtime.synth = new Tone.MembraneSynth({
+      pitchDecay: runtime.kickState.pitchDecay,
+      octaves: runtime.kickState.tone * 4,
+      oscillator: { type: "sine" },
+      envelope: { attack: 0.001, decay: runtime.kickState.decay, sustain: 0, release: 0.01 },
+    });
+  } else if (runtime.instrumentModuleId === "instrument.hihat") {
+    runtime.synth = new Tone.MetalSynth({
+      envelope: { attack: 0.001, decay: runtime.hihatState.decay, release: 0.01 },
+      harmonicity: runtime.hihatState.resonance * 12,
+      modulationIndex: runtime.hihatState.tone * 50,
+      resonance: 1000 + runtime.hihatState.tone * 4000,
+    });
+  } else if (runtime.instrumentModuleId === "instrument.snare") {
+    runtime.synth = new Tone.NoiseSynth({
+      noise: { type: runtime.snareState.tone < 0.5 ? "white" : "brown" },
+      envelope: { attack: runtime.snareState.snap * 0.01, decay: runtime.snareState.decay, sustain: 0, release: 0.01 },
+    });
+  } else if (runtime.instrumentModuleId === "instrument.conga") {
+    runtime.synth = new Tone.MembraneSynth({
+      pitchDecay: runtime.congaState.pitchDecay,
+      octaves: runtime.congaState.tone * 4,
+      oscillator: { type: "sine" },
+      envelope: { attack: 0.001, decay: runtime.congaState.decay, sustain: 0, release: 0.01 },
+    });
+  } else if (runtime.instrumentModuleId === "instrument.clap") {
+    runtime.synth = new Tone.NoiseSynth({
+      noise: { type: "white" },
+      envelope: { attack: 0.001, decay: runtime.clapState.decay, sustain: 0, release: 0.01 },
+    });
+  } else {
+    // Default: FM synth
+    runtime.synth = new Tone.FMSynth();
+  }
 
-if (!runtime.pannerNode) {
-  runtime.pannerNode = new Tone.Panner(0);
-  runtime.gainNode.connect(runtime.pannerNode);
-  runtime.pannerNode.toDestination();
+  runtime.gain = new Tone.Gain(runtime.mixer.volume);
+  runtime.pan = new Tone.Panner(runtime.mixer.pan);
+
+  // Create effect nodes conditionally
+  if (runtime.effectModuleIds.includes("effect.delay")) {
+    runtime.delayNode = new Tone.FeedbackDelay({
+      delayTime: runtime.delayState.time,
+      feedback: runtime.delayState.feedback,
+      wet: runtime.delayState.mix,
+    });
+  }
+
+  if (runtime.effectModuleIds.includes("effect.reverb")) {
+    const finalDecay = runtime.reverbState.roomSize * runtime.reverbState.decay;
+    runtime.reverbNode = new Tone.Reverb({
+      decay: finalDecay,
+      preDelay: runtime.reverbState.preDelay,
+      wet: runtime.reverbState.mix,
+    });
+    // IMPORTANT: Reverb requires async impulse response generation
+    await runtime.reverbNode.generate();
+  }
+
+  // Connect audio chain
+  let chainStart = runtime.synth;
+
+  if (runtime.delayNode) {
+    chainStart.connect(runtime.delayNode);
+    chainStart = runtime.delayNode;
+  }
+
+  if (runtime.reverbNode) {
+    chainStart.connect(runtime.reverbNode);
+    chainStart = runtime.reverbNode;
+  }
+
+  chainStart.connect(runtime.gain);
+  runtime.gain.connect(runtime.pan);
+  runtime.pan.toDestination();
 }
 ```
 
-**Connection Order**: `synth → gain → panner → destination`
+**Connection Order**: `Synth → [Delay] → [Reverb] → Gain → Pan → Destination`
 
-### syncLaneNodes(runtime)
+**Important Notes**:
+- Function is **async** to await reverb generation
+- All callers (`syncLaneRuntimes`, `prepareAllLaneRuntimes`) must await this function
+- Effect nodes are created conditionally based on `effectModuleIds`
+- Reverb impulse response must be generated before audio can pass through
+
+### rebuildReverbNode(runtime)
+
+**Purpose**: Recreate reverb node when decay or roomSize changes.
+
+**Why Needed**: Tone.Reverb requires regenerating the impulse response when decay changes. You cannot simply update the `decay` parameter on an existing reverb node.
+
+**Process**:
+```typescript
+async function rebuildReverbNode(runtime: LaneRuntime) {
+  // Find previous node in chain
+  let chainStart = runtime.synth;
+  if (runtime.delayNode) {
+    chainStart = runtime.delayNode;
+  }
+
+  // Disconnect and dispose old reverb
+  if (runtime.reverbNode) {
+    chainStart.disconnect(runtime.reverbNode);
+    runtime.reverbNode.disconnect();
+    runtime.reverbNode.dispose();
+    runtime.reverbNode = null;
+  }
+
+  // Create and generate new reverb
+  const finalDecay = runtime.reverbState.roomSize * runtime.reverbState.decay;
+  runtime.reverbNode = new Tone.Reverb({
+    decay: finalDecay,
+    preDelay: runtime.reverbState.preDelay,
+    wet: runtime.reverbState.mix,
+  });
+  await runtime.reverbNode.generate();
+
+  // Reconnect chain
+  chainStart.connect(runtime.reverbNode);
+  runtime.reverbNode.connect(runtime.gain);
+}
+```
+
+**When Called**:
+- During `syncLaneRuntimes()` when decay or roomSize changes
+- After detecting parameter changes via comparison with previous values
+
+**Updatable Parameters**:
+- **Require rebuild**: `decay`, `roomSize` (changes final decay time)
+- **Update in place**: `preDelay`, `wet` (mix) - via `.set()`
+
+### applyLaneSynthState(runtime)
 
 **Purpose**: Update node parameters to match runtime state.
 
 **Parameters Updated**:
 ```typescript
-// Synth
-runtime.synth.oscillator.type = runtime.synth.oscillator.wave;
-runtime.synth.harmonicity.value = runtime.synth.harmonicity;
-runtime.synth.modulationIndex.value = runtime.synth.modulation.index;
-runtime.synth.envelope.attack = runtime.synth.envelope.attack;
-// ... (decay, sustain, release, portamento)
+// Synth parameters (FM Synth)
+if (runtime.instrumentModuleId === "instrument.synth-simple") {
+  runtime.synth.set({
+    oscillator: { type: runtime.synthState.wave },
+    harmonicity: runtime.synthState.harmonicity,
+    modulation: { type: runtime.synthState.modulation },
+    envelope: {
+      attack: runtime.synthState.attack,
+      decay: runtime.synthState.decay,
+      sustain: runtime.synthState.sustain,
+      release: runtime.synthState.release,
+    },
+    portamento: runtime.synthState.portamento,
+  });
+}
 
-// Mixer
-runtime.gainNode.gain.value = runtime.mixer.volume;
-runtime.pannerNode.pan.value = runtime.mixer.pan;
+// Drum parameters are applied during synth creation (ensureLaneNodes)
+// and may require rebuilding the synth node for certain parameters
+
+// Delay parameters (if delay node exists)
+if (runtime.delayNode) {
+  runtime.delayNode.set({
+    delayTime: runtime.delayState.time,
+    feedback: runtime.delayState.feedback,
+    wet: runtime.delayState.mix,
+  });
+}
+
+// Reverb parameters (only preDelay and wet can be updated)
+// decay and roomSize require rebuilding the node
+if (runtime.reverbNode) {
+  runtime.reverbNode.set({
+    preDelay: runtime.reverbState.preDelay,
+    wet: runtime.reverbState.mix,
+  });
+}
+```
+
+### applyLaneMixer(runtime)
+
+**Purpose**: Update mixer parameters (volume and pan).
+
+**Parameters Updated**:
+```typescript
+runtime.gain.gain.value = runtime.mixer.volume;
+runtime.pan.pan.value = runtime.mixer.pan;
 ```
 
 **Triggers**: After hydration, when mixer/synth settings change.
@@ -313,22 +541,36 @@ if (Tone.Transport.state === 'started') {
 1. Get next bar index based on melody playback order
 2. Read bar from runtime.bars[barIndex]
 3. Skip if skip divisor check fails
-4. Convert bar.value (0-7) to MIDI note:
-   - BASE_MIDI = 48 (C3)
-   - scaleOffset = SCALE_OFFSETS[bar.value]
-   - midiNote = BASE_MIDI + scaleOffset
-5. Apply randomness if bar.randomize is true:
-   - midiNote += random(-2, 2) semitones
-6. Convert MIDI to frequency: Tone.Frequency(midiNote, "midi").toNote()
-7. Calculate note duration from step.duration
-8. Check glide settings for portamento
-9. Trigger synth:
+4. Determine note/pitch based on instrument type:
+
+   For melodic instruments (synth-simple):
+   - Convert bar.value (0-7) to MIDI note:
+     - BASE_MIDI = 48 (C3)
+     - scaleOffset = SCALE_OFFSETS[bar.value]
+     - midiNote = BASE_MIDI + scaleOffset
+   - Apply randomness if bar.randomize is true:
+     - midiNote += random(-2, 2) semitones
+   - Convert MIDI to frequency: Tone.Frequency(midiNote, "midi").toNote()
+
+   For drum instruments (kick, hihat, snare, conga, clap):
+   - Use fixed pitch/frequency regardless of melody value
+   - Kick: runtime.kickState.pitch (Hz)
+   - Hi-hat: 200 (Hz, fixed)
+   - Snare: "C4" (NoiseSynth doesn't use pitch)
+   - Conga: runtime.congaState.pitch (Hz)
+   - Clap: "C4" (NoiseSynth doesn't use pitch)
+
+5. Calculate note duration from step.duration
+6. Check glide settings for portamento (melodic instruments only)
+7. Trigger synth:
    runtime.synth.triggerAttackRelease(note, duration, time)
-10. Advance melody pointer
-11. Update UI melody indicator
+8. Advance melody pointer
+9. Update UI melody indicator
 ```
 
-**Scale**: Major scale offsets `[0, 2, 4, 5, 7, 9, 11, 12]` (semitones)
+**Scale** (melodic instruments): Major scale offsets `[0, 2, 4, 5, 7, 9, 11, 12]` (semitones)
+
+**Drum Behavior**: Drum instruments ignore melody note values and always play at their configured pitch. This allows rhythm patterns to trigger consistent drum sounds while still using the same melody sequencer infrastructure.
 
 ### nextLaneStepIndex(runtime, length)
 

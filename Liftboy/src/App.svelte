@@ -2,15 +2,30 @@
   import { onMount, onDestroy } from 'svelte';
   import Header from './lib/core/components/ui/Header.svelte';
   import LaneSelector from './lib/core/components/lanes/LaneSelector.svelte';
+  import ModuleSelector from './lib/core/components/ui/ModuleSelector.svelte';
   import XoxSequencer from './lib/rhythm/components/XoxSequencer.svelte';
+  import EuclideanSequencer from './lib/rhythm/components/EuclideanSequencer.svelte';
+  import M185Sequencer from './lib/rhythm/components/M185Sequencer.svelte';
   import MelodySequencer from './lib/melody/components/MelodySequencer.svelte';
+  import StochasticSequencer from './lib/melody/components/StochasticSequencer.svelte';
   import SimpleSynth from './lib/instrument/components/SimpleSynth.svelte';
+  import KickDrum from './lib/instrument/components/KickDrum.svelte';
+  import HihatDrum from './lib/instrument/components/HihatDrum.svelte';
+  import SnareDrum from './lib/instrument/components/SnareDrum.svelte';
+  import CongaDrum from './lib/instrument/components/CongaDrum.svelte';
+  import ClapDrum from './lib/instrument/components/ClapDrum.svelte';
+  import DelayEffect from './lib/effect/components/DelayEffect.svelte';
+  import ReverbEffect from './lib/effect/components/ReverbEffect.svelte';
+  import NoneEffect from './lib/effect/components/NoneEffect.svelte';
   import { initKeyboardControls, destroyKeyboardControls, onKeyboardEvent, type KeyboardEventDetail } from './lib/core/utils/keyboard';
   import { initLaneModuleSync } from './lib/core/stores/sync/laneModuleSync';
   import {
     activateLaneSelector,
-    deactivateLaneSelector
+    deactivateLaneSelector,
+    selectedLaneIndex,
+    lanes,
   } from './lib/core/stores/session/lanes';
+  import { assignModule } from './lib/core/stores/data/projects';
   import {
     currentSection,
     setCurrentSection,
@@ -18,7 +33,13 @@
     slideIndices,
     setSlideIndex
   } from './lib/core/stores/session/navigation';
-  import type { SectionData } from './lib/core/types/types';
+  import {
+    openModuleSelector,
+    closeModuleSelector,
+    isModuleSelectorOpen,
+  } from './lib/core/stores/session/moduleSelection';
+  import type { SectionData, SectionKind } from './lib/core/types/types';
+  import type { ModuleCategory, Lane } from './lib/core/types/project';
   import { get } from 'svelte/store';
   import { scrollToElement, scrollToIndex, createScrollDebouncer } from './lib/core/utils/scrolling';
   import { INTERSECTION_THRESHOLD, SCROLL_DEBOUNCE_DELAY } from './lib/core/utils/constants';
@@ -124,7 +145,20 @@
   }
 
   function handleKeyboardEvent(detail: KeyboardEventDetail) {
+    // Block all navigation when module selector is open
+    if ($isModuleSelectorOpen) {
+      // ModuleSelector handles its own keyboard events
+      return;
+    }
+
     switch (detail.type) {
+      case 'open-module-selector':
+        // Don't allow opening module selector when on LaneSelector
+        if (laneSelectorVisible) {
+          return;
+        }
+        handleOpenModuleSelector();
+        break;
       case 'scroll-next-section':
         if (laneSelectorVisible) {
           // Scroll from LaneSelector to first module
@@ -152,86 +186,372 @@
     }
   }
 
-  const sections: SectionData[] = [
-    {
-      name: 'Step Sequencer',
-      kind: 'xox',
-      slides: [
-        {
-          title: 'Steps',
-          description: 'Per-step controls',
-          inputs: [
-            { key: 'Step', value: 1, unit: '', min: 1, max: 64, step: 1 },
-            { key: 'Value', value: 1, options: ['Off', 'On'] },
-            { key: 'Duration', value: 1, unit: ' steps', min: 0.25, max: 4, step: 0.25 },
-            { key: 'Probability', value: 100, unit: '%', min: 0, max: 100, step: 5 },
+  function handleOpenModuleSelector() {
+    // Determine which category based on current section
+    const sectionIndex = $currentSection ?? 0;
+    const section = sections[sectionIndex];
+    if (!section) return;
+
+    let category: ModuleCategory;
+    if (section.kind === 'xox' || section.kind === 'euclidean' || section.kind === 'm185') {
+      category = 'rhythm';
+    } else if (section.kind === 'melody' || section.kind === 'stochastic') {
+      category = 'melody';
+    } else if (section.kind === 'synth') {
+      category = 'instrument';
+    } else if (section.kind === 'delay' || section.kind === 'reverb' || section.kind === 'none') {
+      category = 'effect';
+    } else {
+      return;
+    }
+
+    openModuleSelector(category);
+  }
+
+  function handleModuleConfirm(definitionId: string) {
+    const sectionIndex = $currentSection ?? 0;
+    const section = sections[sectionIndex];
+    if (!section) {
+      closeModuleSelector();
+      return;
+    }
+
+    // Determine category from section kind
+    let category: ModuleCategory;
+    if (section.kind === 'xox' || section.kind === 'euclidean' || section.kind === 'm185') {
+      category = 'rhythm';
+    } else if (section.kind === 'melody' || section.kind === 'stochastic') {
+      category = 'melody';
+    } else if (section.kind === 'synth') {
+      category = 'instrument';
+    } else if (section.kind === 'delay' || section.kind === 'reverb' || section.kind === 'none') {
+      category = 'effect';
+    } else {
+      closeModuleSelector();
+      return;
+    }
+
+    // Update the actual lane's module definition
+    const laneIndex = $selectedLaneIndex ?? 0;
+    assignModule(laneIndex, category, definitionId);
+
+    closeModuleSelector();
+  }
+
+  // Build sections from the currently selected lane's modules
+  $: currentLane = $lanes[$selectedLaneIndex ?? 0];
+
+  $: sections = buildSections(currentLane);
+
+  function buildSections(lane: Lane | undefined): SectionData[] {
+    if (!lane) return [];
+
+    const result: SectionData[] = [];
+
+    // Rhythm module section
+    if (lane.modules.rhythm) {
+      const rhythmId = lane.modules.rhythm.definitionId;
+      if (rhythmId === 'rhythm.xox-basic') {
+        result.push({
+          name: 'Step Sequencer',
+          kind: 'xox',
+          slides: [
+            {
+              title: 'Steps',
+              description: 'Per-step controls',
+              inputs: [
+                { key: 'Step', value: 1, unit: '', min: 1, max: 64, step: 1 },
+                { key: 'Value', value: 1, options: ['Off', 'On'] },
+                { key: 'Duration', value: 1, unit: ' steps', min: 0.25, max: 4, step: 0.25 },
+                { key: 'Probability', value: 100, unit: '%', min: 0, max: 100, step: 5 },
+              ],
+            },
+            {
+              title: 'Pattern',
+              description: 'Global playback settings',
+              inputs: [
+                { key: 'Length', value: 64, unit: ' steps', min: 1, max: 64, step: 1 },
+                { key: 'Clock', value: '1/16', options: ['1/4', '1/8', '1/16', '1/32'] },
+                { key: 'Order', value: 'forward', options: ['forward', 'backwards', 'random'] },
+                { key: '', value: '' },
+              ],
+            },
           ],
-        },
-        {
-          title: 'Pattern',
-          description: 'Global playback settings',
-          inputs: [
-            { key: 'Length', value: 64, unit: ' steps', min: 1, max: 64, step: 1 },
-            { key: 'Clock', value: '1/16', options: ['1/4', '1/8', '1/16', '1/32'] },
-            { key: 'Order', value: 'forward', options: ['forward', 'backwards', 'random'] },
-            { key: '', value: '' },
+        });
+      } else if (rhythmId === 'rhythm.euclidean') {
+        result.push({
+          name: 'Euclidean Sequencer',
+          kind: 'euclidean',
+          slides: [
+            {
+              title: 'Pattern',
+              description: 'Euclidean rhythm generator',
+              inputs: [
+                { key: 'Steps', value: 16, unit: '', min: 1, max: 32, step: 1 },
+                { key: 'Pulses', value: 4, unit: '', min: 0, max: 32, step: 1 },
+                { key: 'Rotation', value: 0, unit: '', min: 0, max: 31, step: 1 },
+                { key: 'Clock', value: '1/16', options: ['1/4', '1/8', '1/16', '1/32'] },
+              ],
+            },
           ],
-        },
-      ],
-    },
-    {
-      name: 'Melody Sequencer',
-      kind: 'melody',
-      slides: [
-        {
-          title: 'Bars',
-          description: 'Per-bar controls',
-          inputs: [
-            { key: 'Step', value: 1, unit: '', min: 1, max: 32, step: 1 },
-            { key: 'Note', value: 0, min: 0, max: 7, step: 1 },
-            { key: 'Glide', value: 0, options: ['Off', 'On'] },
-            { key: 'Randomize', value: 0, options: ['Off', 'On'] },
+        });
+      } else if (rhythmId === 'rhythm.m185') {
+        result.push({
+          name: 'M185 Sequencer',
+          kind: 'm185',
+          slides: [
+            {
+              title: 'Entries',
+              description: 'Trigger pattern entries',
+              inputs: [
+                { key: 'Entry', value: 1, unit: '', min: 1, max: 16, step: 1 },
+                { key: 'Mode', value: 'repeat', options: ['repeat', 'hold', 'skip'] },
+                { key: 'Steps', value: 1, unit: '', min: 1, max: 16, step: 1 },
+                { key: '', value: '' },
+              ],
+            },
+            {
+              title: 'Pattern',
+              description: 'Global settings',
+              inputs: [
+                { key: 'Clock', value: '1/16', options: ['1/4', '1/8', '1/16', '1/32'] },
+                { key: '', value: '' },
+                { key: '', value: '' },
+                { key: '', value: '' },
+              ],
+            },
           ],
-        },
-        {
-          title: 'Playback',
-          description: 'Sequence behavior',
-          inputs: [
-            { key: 'Length', value: 8, unit: ' bars', min: 1, max: 32, step: 1 },
-            { key: 'Skip', value: 'none', options: ['none', 'second', 'third', 'fourth'] },
-            { key: 'Order', value: 'forward', options: ['forward', 'backwards', 'random'] },
-            { key: '', value: '' },
+        });
+      }
+    }
+
+    // Melody module section
+    if (lane.modules.melody) {
+      const melodyId = lane.modules.melody.definitionId;
+      if (melodyId === 'melody.melody-basic') {
+        result.push({
+          name: 'Melody Sequencer',
+          kind: 'melody',
+          slides: [
+            {
+              title: 'Bars',
+              description: 'Per-bar controls',
+              inputs: [
+                { key: 'Step', value: 1, unit: '', min: 1, max: 32, step: 1 },
+                { key: 'Note', value: 0, min: 0, max: 7, step: 1 },
+                { key: 'Glide', value: 0, options: ['Off', 'On'] },
+                { key: 'Randomize', value: 0, options: ['Off', 'On'] },
+              ],
+            },
+            {
+              title: 'Playback',
+              description: 'Sequence behavior',
+              inputs: [
+                { key: 'Length', value: 8, unit: ' bars', min: 1, max: 32, step: 1 },
+                { key: 'Skip', value: 'none', options: ['none', 'second', 'third', 'fourth'] },
+                { key: 'Order', value: 'forward', options: ['forward', 'backwards', 'random'] },
+                { key: '', value: '' },
+              ],
+            },
           ],
-        },
-      ],
-    },
-    {
-      name: 'Simple Synth',
-      kind: 'synth',
-      slides: [
-        {
-          title: 'Oscillator',
-          description: 'Tone.Synth voice',
-          inputs: [
-            { key: 'Wave', value: 'amtriangle', options: ['sine', 'square', 'triangle', 'sawtooth', 'amtriangle'] },
-            { key: 'Harmonicity', value: 0.5, min: 0, max: 2, step: 0.1 },
-            { key: 'Mod', value: 'sine', options: ['sine', 'triangle', 'square', 'sawtooth'] },
-            { key: 'Portamento', value: 0.05, unit: ' s', min: 0, max: 1, step: 0.01 },
+        });
+      } else if (melodyId === 'melody.stochastic') {
+        result.push({
+          name: 'Stochastic Sequencer',
+          kind: 'stochastic',
+          slides: [
+            {
+              title: 'Random',
+              description: 'Probability-based melody',
+              inputs: [
+                { key: 'Min Note', value: 0, unit: '', min: 0, max: 7, step: 1 },
+                { key: 'Max Note', value: 7, unit: '', min: 0, max: 7, step: 1 },
+                { key: 'Change', value: 50, unit: '%', min: 0, max: 100, step: 5 },
+                { key: 'Clock', value: '1/16', options: ['1/4', '1/8', '1/16', '1/32'] },
+              ],
+            },
           ],
-        },
-        {
-          title: 'Envelope',
-          description: 'Amplitude contour',
-          inputs: [
-            { key: 'Attack', value: 0.05, unit: ' s', min: 0, max: 1, step: 0.01 },
-            { key: 'Decay', value: 0.2, unit: ' s', min: 0, max: 1, step: 0.01 },
-            { key: 'Sustain', value: 0.2, unit: '', min: 0, max: 1, step: 0.05 },
-            { key: 'Release', value: 1.5, unit: ' s', min: 0, max: 3, step: 0.1 },
+        });
+      }
+    }
+
+    // Instrument module section
+    if (lane.modules.instrument) {
+      const instrumentId = lane.modules.instrument.definitionId;
+      if (instrumentId === 'instrument.synth-simple') {
+        result.push({
+          name: 'Simple Synth',
+          kind: 'synth',
+          slides: [
+            {
+              title: 'Oscillator',
+              description: 'Tone.Synth voice',
+              inputs: [
+                { key: 'Wave', value: 'amtriangle', options: ['sine', 'square', 'triangle', 'sawtooth', 'amtriangle'] },
+                { key: 'Harmonicity', value: 0.5, min: 0, max: 2, step: 0.1 },
+                { key: 'Mod', value: 'sine', options: ['sine', 'triangle', 'square', 'sawtooth'] },
+                { key: 'Portamento', value: 0.05, unit: ' s', min: 0, max: 1, step: 0.01 },
+              ],
+            },
+            {
+              title: 'Envelope',
+              description: 'Amplitude contour',
+              inputs: [
+                { key: 'Attack', value: 0.05, unit: ' s', min: 0, max: 1, step: 0.01 },
+                { key: 'Decay', value: 0.2, unit: ' s', min: 0, max: 1, step: 0.01 },
+                { key: 'Sustain', value: 0.2, unit: '', min: 0, max: 1, step: 0.05 },
+                { key: 'Release', value: 1.5, unit: ' s', min: 0, max: 3, step: 0.1 },
+              ],
+            },
           ],
-        },
-      ],
-    },
-  ];
+        });
+      } else if (instrumentId === 'instrument.kick') {
+        result.push({
+          name: 'Kick Drum',
+          kind: 'kick',
+          slides: [
+            {
+              title: 'Kick',
+              description: 'Bass drum parameters',
+              inputs: [
+                { key: 'Pitch', value: 60, unit: ' Hz', min: 20, max: 100, step: 1 },
+                { key: 'Pitch Decay', value: 0.05, unit: ' s', min: 0, max: 1, step: 0.01 },
+                { key: 'Tone', value: 0.5, unit: '', min: 0, max: 1, step: 0.05 },
+                { key: 'Decay', value: 0.3, unit: ' s', min: 0, max: 2, step: 0.05 },
+              ],
+            },
+          ],
+        });
+      } else if (instrumentId === 'instrument.hihat') {
+        result.push({
+          name: 'Hi-Hat',
+          kind: 'hihat',
+          slides: [
+            {
+              title: 'Hi-Hat',
+              description: 'Metallic hi-hat parameters',
+              inputs: [
+                { key: 'Tone', value: 0.7, unit: '', min: 0, max: 1, step: 0.05 },
+                { key: 'Decay', value: 0.05, unit: ' s', min: 0, max: 1, step: 0.01 },
+                { key: 'Resonance', value: 0.5, unit: '', min: 0, max: 1, step: 0.05 },
+                { key: '', value: '' },
+              ],
+            },
+          ],
+        });
+      } else if (instrumentId === 'instrument.snare') {
+        result.push({
+          name: 'Snare Drum',
+          kind: 'snare',
+          slides: [
+            {
+              title: 'Snare',
+              description: 'Snare drum parameters',
+              inputs: [
+                { key: 'Tone', value: 0.5, unit: '', min: 0, max: 1, step: 0.05 },
+                { key: 'Snap', value: 0.8, unit: '', min: 0, max: 1, step: 0.05 },
+                { key: 'Decay', value: 0.15, unit: ' s', min: 0, max: 1, step: 0.01 },
+                { key: '', value: '' },
+              ],
+            },
+          ],
+        });
+      } else if (instrumentId === 'instrument.conga') {
+        result.push({
+          name: 'Conga Drum',
+          kind: 'conga',
+          slides: [
+            {
+              title: 'Conga',
+              description: 'Tuned conga parameters',
+              inputs: [
+                { key: 'Pitch', value: 150, unit: ' Hz', min: 80, max: 300, step: 5 },
+                { key: 'Pitch Decay', value: 0.08, unit: ' s', min: 0, max: 0.5, step: 0.01 },
+                { key: 'Tone', value: 0.6, unit: '', min: 0, max: 1, step: 0.05 },
+                { key: 'Decay', value: 0.2, unit: ' s', min: 0, max: 1, step: 0.01 },
+              ],
+            },
+          ],
+        });
+      } else if (instrumentId === 'instrument.clap') {
+        result.push({
+          name: 'Clap',
+          kind: 'clap',
+          slides: [
+            {
+              title: 'Clap',
+              description: 'Hand clap parameters',
+              inputs: [
+                { key: 'Tone', value: 0.6, unit: '', min: 0, max: 1, step: 0.05 },
+                { key: 'Decay', value: 0.08, unit: ' s', min: 0, max: 1, step: 0.01 },
+                { key: 'Spread', value: 0.5, unit: '', min: 0, max: 1, step: 0.05 },
+                { key: '', value: '' },
+              ],
+            },
+          ],
+        });
+      }
+    }
+
+    // Effect module section
+    if (lane.modules.effect) {
+      const effectId = lane.modules.effect.definitionId;
+      if (effectId === 'effect.delay') {
+        result.push({
+          name: 'Delay Effect',
+          kind: 'delay',
+          slides: [
+            {
+              title: 'Delay',
+              description: 'Feedback delay effect',
+              inputs: [
+                { key: 'Time', value: 0.25, unit: ' s', min: 0, max: 2, step: 0.01 },
+                { key: 'Feedback', value: 0.3, unit: '', min: 0, max: 0.95, step: 0.01 },
+                { key: 'Mix', value: 0.3, unit: '', min: 0, max: 1, step: 0.01 },
+                { key: '', value: '' },
+              ],
+            },
+          ],
+        });
+      } else if (effectId === 'effect.reverb') {
+        result.push({
+          name: 'Reverb Effect',
+          kind: 'reverb',
+          slides: [
+            {
+              title: 'Reverb',
+              description: 'Space simulation effect',
+              inputs: [
+                { key: 'Room Size', value: 0.5, unit: '', min: 0, max: 1, step: 0.05 },
+                { key: 'Decay', value: 1.5, unit: ' s', min: 0, max: 10, step: 0.1 },
+                { key: 'Mix', value: 0.3, unit: '', min: 0, max: 1, step: 0.05 },
+                { key: 'Pre-Delay', value: 0.01, unit: ' s', min: 0, max: 0.1, step: 0.001 },
+              ],
+            },
+          ],
+        });
+      } else if (effectId === 'effect.none') {
+        result.push({
+          name: 'No Effect',
+          kind: 'none',
+          slides: [
+            {
+              title: 'None',
+              description: 'No effect processing (bypass)',
+              inputs: [
+                { key: '', value: '' },
+                { key: '', value: '' },
+                { key: '', value: '' },
+                { key: '', value: '' },
+              ],
+            },
+          ],
+        });
+      }
+    }
+
+    return result;
+  }
 
   onMount(() => {
     initKeyboardControls();
@@ -271,9 +591,30 @@
             sectionIndex={index}
             globalInputsVisible={true}
           />
+        {:else if section.kind === 'euclidean'}
+          <svelte:component
+            this={EuclideanSequencer}
+            slides={section.slides}
+            sectionIndex={index}
+            globalInputsVisible={true}
+          />
+        {:else if section.kind === 'm185'}
+          <svelte:component
+            this={M185Sequencer}
+            slides={section.slides}
+            sectionIndex={index}
+            globalInputsVisible={true}
+          />
         {:else if section.kind === 'melody'}
           <svelte:component
             this={MelodySequencer}
+            slides={section.slides}
+            sectionIndex={index}
+            globalInputsVisible={true}
+          />
+        {:else if section.kind === 'stochastic'}
+          <svelte:component
+            this={StochasticSequencer}
             slides={section.slides}
             sectionIndex={index}
             globalInputsVisible={true}
@@ -285,10 +626,67 @@
             sectionIndex={index}
             globalInputsVisible={true}
           />
+        {:else if section.kind === 'kick'}
+          <svelte:component
+            this={KickDrum}
+            slides={section.slides}
+            sectionIndex={index}
+            globalInputsVisible={true}
+          />
+        {:else if section.kind === 'hihat'}
+          <svelte:component
+            this={HihatDrum}
+            slides={section.slides}
+            sectionIndex={index}
+            globalInputsVisible={true}
+          />
+        {:else if section.kind === 'snare'}
+          <svelte:component
+            this={SnareDrum}
+            slides={section.slides}
+            sectionIndex={index}
+            globalInputsVisible={true}
+          />
+        {:else if section.kind === 'conga'}
+          <svelte:component
+            this={CongaDrum}
+            slides={section.slides}
+            sectionIndex={index}
+            globalInputsVisible={true}
+          />
+        {:else if section.kind === 'clap'}
+          <svelte:component
+            this={ClapDrum}
+            slides={section.slides}
+            sectionIndex={index}
+            globalInputsVisible={true}
+          />
+        {:else if section.kind === 'delay'}
+          <svelte:component
+            this={DelayEffect}
+            slides={section.slides}
+            sectionIndex={index}
+            globalInputsVisible={true}
+          />
+        {:else if section.kind === 'reverb'}
+          <svelte:component
+            this={ReverbEffect}
+            slides={section.slides}
+            sectionIndex={index}
+            globalInputsVisible={true}
+          />
+        {:else if section.kind === 'none'}
+          <svelte:component
+            this={NoneEffect}
+            slides={section.slides}
+            sectionIndex={index}
+            globalInputsVisible={true}
+          />
         {/if}
       </section>
     {/each}
   </div>
+  <ModuleSelector onConfirm={handleModuleConfirm} />
 </main>
 
 <style>

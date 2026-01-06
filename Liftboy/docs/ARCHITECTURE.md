@@ -51,11 +51,27 @@ Lane 4: [Rhythm Module] → [Melody Module] → [Instrument] → [Effect] → Mi
 ```
 
 Each lane has:
-- **Rhythm Module**: Generates trigger patterns (e.g., XOX sequencer)
+- **Rhythm Module**: Generates trigger patterns
+  - `rhythm.xox-basic` - Traditional step sequencer
+  - `rhythm.euclidean` - Bjorklund algorithm generator
+  - `rhythm.m185` - Entry-based sequencer
 - **Melody Module**: Generates note sequences
-- **Instrument Module**: Synthesizes audio (e.g., FM synth)
-- **Effect Module**: Processes audio (reverb, delay, etc.)
+  - `melody.melody-basic` - 32-bar pitch sequence
+  - `melody.stochastic` - Probability-based random notes
+- **Instrument Module**: Synthesizes audio
+  - `instrument.synth-simple` - FM synthesizer with ADSR
+  - `instrument.kick` - Bass drum synthesizer
+  - `instrument.hihat` - Metallic hi-hat synthesizer
+  - `instrument.snare` - Snare drum synthesizer
+  - `instrument.conga` - Tuned conga drum synthesizer
+  - `instrument.clap` - Hand clap synthesizer
+- **Effect Module**: Processes audio
+  - `effect.delay` - Feedback delay
+  - `effect.reverb` - Room simulation
+  - `effect.none` - No effect (bypass)
 - **Mixer Settings**: Volume, pan, mode (on/mute/solo)
+
+**Parallel Processing**: Each lane runs independently with its own `LaneRuntime` containing separate audio nodes, loops, and state.
 
 **Lane Management**:
 - Projects support 1-12 lanes (defined in `PROJECT_LANE_LIMIT` constant)
@@ -69,17 +85,19 @@ Each lane has:
 The application maintains two parallel state representations:
 
 **Editor State** (UI Stores):
-- `sequencer.ts` - Current step editor state
-- `melody.ts` - Current bar editor state
-- `synth.ts` - Current synth parameters
+- Module-specific stores for current lane only:
+  - `rhythm/stores/sequencer.ts`, `euclidean.ts`, `m185.ts` - Rhythm editors
+  - `melody/stores/melody.ts`, `stochastic.ts` - Melody editors
+  - `instrument/stores/synth.ts` - Synth parameters
+  - `effect/stores/delay.ts`, `reverb.ts` - Effect parameters
 - **Purpose**: Active editing, real-time UI updates
 
 **Persisted State** (Projects Store):
-- `projects.ts` - All saved projects and lanes
+- `core/stores/data/projects.ts` - All saved projects and lanes
 - `lane.modules[category].state` - Serialized module snapshots
 - **Purpose**: Multi-project support, browser persistence
 
-**Synchronization** is handled by `laneModuleSync.ts` (see [State Management](STATE_MANAGEMENT.md)).
+**Module-Aware Synchronization**: `laneModuleSync.ts` detects active module type and loads/saves appropriate snapshots (see [State Management](STATE_MANAGEMENT.md)).
 
 ### 3. Module System
 
@@ -104,46 +122,81 @@ See [Modules Documentation](MODULES.md) for details.
 
 ```
 src/lib/
-├── audio/
-│   └── engine.ts                    # Core audio engine & Tone.js integration
-├── modules/
-│   └── registry.ts                  # Module registration system
-├── services/
-│   └── projectPersistence.ts        # LocalStorage read/write
-├── stores/
-│   ├── sequencer.ts                 # XOX/step sequencer state
-│   ├── melody.ts                    # Melody/bar sequencer state
-│   ├── synth.ts                     # FM synth parameters
-│   ├── lanes.ts                     # Multi-lane mixer state
-│   ├── projects.ts                  # Project & lane persistence
-│   ├── transport.ts                 # BPM/tempo control
-│   ├── playback.ts                  # Playback position indicators
-│   ├── laneModuleSync.ts            # Editor ↔ project sync
-│   └── navigation.ts                # UI scroll/section navigation
-├── types/
-│   └── project.ts                   # Core data models
 ├── core/
+│   ├── audio/
+│   │   └── engine.ts                    # Audio engine with module dispatching
 │   ├── components/
 │   │   ├── lanes/
-│   │   │   └── LaneSelector.svelte  # Multi-lane mixer UI
+│   │   │   └── LaneSelector.svelte      # Multi-lane mixer UI
 │   │   └── ui/
-│   │       ├── Header.svelte        # Transport controls
-│   │       └── Inputs.svelte        # Universal control component
+│   │       ├── Header.svelte            # Transport controls
+│   │       ├── Inputs.svelte            # Universal control component
+│   │       └── ModuleSelector.svelte    # Module switching UI
+│   ├── modules/
+│   │   └── registry.ts                  # Module registry
+│   ├── services/
+│   │   └── projectPersistence.ts        # LocalStorage API
 │   ├── stores/
-│   │   └── session/
-│   │       └── navigation.ts        # UI scroll/section tracking
+│   │   ├── data/
+│   │   │   └── projects.ts              # Project & lane persistence
+│   │   ├── session/
+│   │   │   ├── lanes.ts                 # Lane selection & mixer
+│   │   │   ├── transport.ts             # BPM/tempo control
+│   │   │   ├── playback.ts              # Playback indicators
+│   │   │   ├── navigation.ts            # UI scroll tracking
+│   │   │   └── moduleSelection.ts       # Module picker state
+│   │   └── sync/
+│   │       └── laneModuleSync.ts        # Module-aware sync layer
+│   ├── types/
+│   │   ├── types.ts                     # UI types
+│   │   └── project.ts                   # Data models
 │   └── utils/
-│       └── keyboard.ts              # Keyboard event dispatcher
+│       ├── keyboard.ts                  # Keyboard dispatcher
+│       ├── scrolling.ts                 # Scroll utilities
+│       └── constants.ts                 # App constants
 ├── rhythm/
-│   └── components/
-│       └── XoxSequencer.svelte      # Step sequencer UI
+│   ├── components/
+│   │   ├── XoxSequencer.svelte          # Step sequencer UI
+│   │   ├── EuclideanSequencer.svelte    # Euclidean UI
+│   │   └── M185Sequencer.svelte         # M185 UI
+│   ├── stores/
+│   │   ├── sequencer.ts                 # XOX state
+│   │   ├── euclidean.ts                 # Euclidean state
+│   │   └── m185.ts                      # M185 state
+│   └── types.ts                         # Rhythm types
 ├── melody/
-│   └── components/
-│       └── MelodySequencer.svelte   # Bar sequencer UI
+│   ├── components/
+│   │   ├── MelodySequencer.svelte       # Bar sequencer UI
+│   │   └── StochasticSequencer.svelte   # Stochastic UI
+│   ├── stores/
+│   │   ├── melody.ts                    # Melody state
+│   │   └── stochastic.ts                # Stochastic state
+│   └── types.ts                         # Melody types
 ├── instrument/
-│   └── components/
-│       └── SimpleSynth.svelte       # Synth parameter UI
-└── types.ts                         # UI type definitions
+│   ├── components/
+│   │   ├── SimpleSynth.svelte           # Synth UI
+│   │   ├── KickDrum.svelte              # Kick drum UI
+│   │   ├── HihatDrum.svelte             # Hi-hat UI
+│   │   ├── SnareDrum.svelte             # Snare drum UI
+│   │   ├── CongaDrum.svelte             # Conga drum UI
+│   │   └── ClapDrum.svelte              # Clap UI
+│   ├── stores/
+│   │   ├── synth.ts                     # Synth state
+│   │   ├── kick.ts                      # Kick drum state
+│   │   ├── hihat.ts                     # Hi-hat state
+│   │   ├── snare.ts                     # Snare drum state
+│   │   ├── conga.ts                     # Conga drum state
+│   │   └── clap.ts                      # Clap state
+│   └── types.ts                         # Instrument types
+└── effect/
+    ├── components/
+    │   ├── DelayEffect.svelte           # Delay UI
+    │   ├── ReverbEffect.svelte          # Reverb UI
+    │   └── NoneEffect.svelte            # No effect placeholder UI
+    ├── stores/
+    │   ├── delay.ts                     # Delay state
+    │   └── reverb.ts                    # Reverb state
+    └── types.ts                         # Effect types
 ```
 
 ## Data Flow Diagrams
@@ -287,7 +340,7 @@ viewportObserver = new IntersectionObserver(
 );
 ```
 
-This ensures keyboard input routing (1-4 keys + arrows) always targets the visible section without manual state management.
+This ensures keyboard input routing (tap 1-4 to increment, hold 1-4 + arrows to adjust) always targets the visible section without manual state management. The keyboard system uses tap detection (<200ms threshold) to differentiate between quick increments and hold-for-adjustment workflows.
 
 ## State Management Principles
 
@@ -325,17 +378,33 @@ See [Audio Engine Documentation](AUDIO_ENGINE.md) for detailed explanation.
 - **Tone.Loop**: Per-lane timing loop
 - **Pointers**: Track current step/bar position
 - **Sanitization**: Validates loaded state before use
+- **Async Reverb**: Reverb nodes require async impulse response generation
+  - `ensureLaneNodes()` awaits `reverb.generate()`
+  - Decay/roomSize changes require rebuilding the reverb node
+  - Use `rebuildReverbNode()` helper for parameter changes
 
 ## Module Categories
 
-| Category | Purpose | Example | State Content |
-|----------|---------|---------|---------------|
-| `rhythm` | Generate trigger patterns | XOX sequencer | Steps, length, timing |
-| `melody` | Generate note sequences | Bar sequencer | Bars, pitch values |
-| `instrument` | Synthesize audio | FM synth | Oscillator, ADSR |
-| `effect` | Process audio | Reverb, delay | Effect parameters |
+| Category | Module ID | Purpose | State Content |
+|----------|-----------|---------|---------------|
+| `rhythm` | `rhythm.xox-basic` | 64-step trigger pattern | Steps, length, clock, order, probability |
+| `rhythm` | `rhythm.euclidean` | Bjorklund algorithm | Steps, pulses, rotation, clock |
+| `rhythm` | `rhythm.m185` | Entry-based triggers | Entries, modes, steps per entry, clock |
+| `melody` | `melody.melody-basic` | 32-bar pitch sequence | Bars, length, skip, order, glide, randomize |
+| `melody` | `melody.stochastic` | Random note generator | Min/max note, change probability, clock |
+| `instrument` | `instrument.synth-simple` | FM synthesizer | Wave, harmonicity, mod, envelope, portamento |
+| `instrument` | `instrument.kick` | Bass drum synthesizer | Pitch, pitch decay, tone, decay |
+| `instrument` | `instrument.hihat` | Metallic hi-hat synthesizer | Tone, decay, resonance |
+| `instrument` | `instrument.snare` | Snare drum synthesizer | Tone, snap, decay |
+| `instrument` | `instrument.conga` | Tuned conga drum synthesizer | Pitch, pitch decay, tone, decay |
+| `instrument` | `instrument.clap` | Hand clap synthesizer | Tone, decay, spread |
+| `effect` | `effect.delay` | Feedback delay | Time, feedback, mix |
+| `effect` | `effect.reverb` | Room simulation | Room size, decay, mix, pre-delay |
+| `effect` | `effect.none` | No processing | (empty) |
 
 **Constraint**: Each lane has exactly one module per category.
+
+**Integration**: The audio engine uses module-aware dispatching - `tickLane()` routes to different handlers based on active `rhythmId`/`melodyId`, and the sync layer saves/loads module-specific snapshots.
 
 ## Key Design Decisions
 

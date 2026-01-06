@@ -16,14 +16,26 @@ Lane
 
 ## Module Categories
 
-| Category | Purpose | Current Modules | State Content |
-|----------|---------|-----------------|---------------|
-| `rhythm` | Generate trigger patterns | `xox-basic` | Steps, length, clock, order |
-| `melody` | Generate note sequences | `melody-basic` | Bars, length, skip, order |
-| `instrument` | Synthesize audio | `synth-simple` | Oscillator, envelope, portamento |
-| `effect` | Process audio | `none` | (pass-through, no parameters) |
+| Category | Module ID | Purpose | State Content |
+|----------|-----------|---------|---------------|
+| `rhythm` | `rhythm.xox-basic` | 64-step trigger pattern | Steps, length, clock, order, probability |
+| `rhythm` | `rhythm.euclidean` | Bjorklund algorithm generator | Steps, pulses, rotation, clock |
+| `rhythm` | `rhythm.m185` | Entry-based sequencer | Entries, modes, steps per entry, clock |
+| `melody` | `melody.melody-basic` | 32-bar pitch sequence | Bars, length, skip, order, glide, randomize |
+| `melody` | `melody.stochastic` | Random note generator | Min/max note, change probability, current note, clock |
+| `instrument` | `instrument.synth-simple` | FM synthesizer | Wave, harmonicity, mod, envelope, portamento |
+| `instrument` | `instrument.kick` | Bass drum synthesizer | Pitch, pitch decay, tone, decay |
+| `instrument` | `instrument.hihat` | Metallic hi-hat synthesizer | Tone, decay, resonance |
+| `instrument` | `instrument.snare` | Snare drum synthesizer | Tone, snap, decay |
+| `instrument` | `instrument.conga` | Tuned conga drum synthesizer | Pitch, pitch decay, tone, decay |
+| `instrument` | `instrument.clap` | Hand clap synthesizer | Tone, decay, spread |
+| `effect` | `effect.delay` | Feedback delay | Time, feedback, mix |
+| `effect` | `effect.reverb` | Room simulation | Room size, decay, mix, pre-delay |
+| `effect` | `effect.none` | No processing | (empty, bypass) |
 
 **Constraint**: Each lane has exactly **one module per category**.
+
+**Implementation**: All modules integrated with module-aware dispatching in audio engine and module-aware sync in state layer.
 
 ## Module Definition
 
@@ -130,31 +142,101 @@ export function getModulesByCategory(category: ModuleCategory): ModuleDefinition
 **Registered On**: App initialization
 
 ```typescript
-// rhythm.xox-basic
+// Rhythm modules
 registerModule({
   id: 'rhythm.xox-basic',
   category: 'rhythm',
   version: 1,
-  defaultState: createSequencerSnapshot()  // From sequencer store
+  defaultState: createSequencerSnapshot()
 });
 
-// melody.melody-basic
+registerModule({
+  id: 'rhythm.euclidean',
+  category: 'rhythm',
+  version: 1,
+  defaultState: createEuclideanSnapshot()
+});
+
+registerModule({
+  id: 'rhythm.m185',
+  category: 'rhythm',
+  version: 1,
+  defaultState: createM185Snapshot()
+});
+
+// Melody modules
 registerModule({
   id: 'melody.melody-basic',
   category: 'melody',
   version: 1,
-  defaultState: createMelodySnapshot()  // From melody store
+  defaultState: createMelodySnapshot()
 });
 
-// instrument.synth-simple
+registerModule({
+  id: 'melody.stochastic',
+  category: 'melody',
+  version: 1,
+  defaultState: createStochasticSnapshot()
+});
+
+// Instrument modules
 registerModule({
   id: 'instrument.synth-simple',
   category: 'instrument',
   version: 1,
-  defaultState: createSynthSnapshot()  // From synth store
+  defaultState: createSynthSnapshot()
 });
 
-// effect.none (pass-through)
+registerModule({
+  id: 'instrument.kick',
+  category: 'instrument',
+  version: 1,
+  defaultState: createKickSnapshot()
+});
+
+registerModule({
+  id: 'instrument.hihat',
+  category: 'instrument',
+  version: 1,
+  defaultState: createHihatSnapshot()
+});
+
+registerModule({
+  id: 'instrument.snare',
+  category: 'instrument',
+  version: 1,
+  defaultState: createSnareSnapshot()
+});
+
+registerModule({
+  id: 'instrument.conga',
+  category: 'instrument',
+  version: 1,
+  defaultState: createCongaSnapshot()
+});
+
+registerModule({
+  id: 'instrument.clap',
+  category: 'instrument',
+  version: 1,
+  defaultState: createClapSnapshot()
+});
+
+// Effect modules
+registerModule({
+  id: 'effect.delay',
+  category: 'effect',
+  version: 1,
+  defaultState: createDelaySnapshot()
+});
+
+registerModule({
+  id: 'effect.reverb',
+  category: 'effect',
+  version: 1,
+  defaultState: createReverbSnapshot()
+});
+
 registerModule({
   id: 'effect.none',
   category: 'effect',

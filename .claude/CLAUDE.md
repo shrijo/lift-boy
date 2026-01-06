@@ -6,9 +6,10 @@ Lift-Boy is a browser-based polyphonic audio sequencer with keyboard-first workf
 
 **Core Features**:
 - Multi-lane architecture (1-12 simultaneous voices)
-- XOX step sequencer (64-step trigger patterns)
-- Melody sequencer (32-bar pitch sequences)
+- Multiple rhythm modules: XOX step sequencer, Euclidean rhythm generator, M185 entry-based sequencer
+- Multiple melody modules: Basic melody sequencer, Stochastic probability-based generator
 - FM synthesizer with ADSR envelope
+- Effect modules: Delay, Reverb
 - Browser LocalStorage persistence
 - Keyboard-first controls
 
@@ -66,31 +67,93 @@ After implementation:
 
 ### Lane-Based Multi-Voice
 Each lane is an independent voice with:
-- Rhythm module (XOX sequencer)
-- Melody module
+- Rhythm module (XOX, Euclidean, or M185 sequencer)
+- Melody module (Basic melody or Stochastic generator)
 - Instrument module (FM synth)
+- Effect module (Delay or Reverb)
 - Mixer settings (volume, pan, mute/solo)
 
 **Lane Management**:
 - Projects support 1-12 lanes (defined in `PROJECT_LANE_LIMIT`)
+- Each lane runs in parallel with independent state and audio processing
 - When adding a lane, it automatically becomes the selected/active lane
 - When removing lanes, selection is preserved if the lane still exists
 - If the selected lane is deleted, the last remaining lane becomes active
 - Lane selection logic is in `src/lib/core/stores/session/lanes.ts`
 
+**Important**: Lanes maintain independent state and audio nodes. Each lane has its own `LaneRuntime` in the audio engine with separate Tone.Loop, FMSynth, and effect nodes.
+
 See: `docs/adr/0001-lane-architecture.md`
 
 ### Dual State System
-- **Editor Stores**: Temporary editing state for current lane
+- **Editor Stores**: Temporary editing state for current lane (module-specific stores)
 - **Project Store**: Persistent project data for all lanes
-- **Sync Layer**: `laneModuleSync.ts` bridges the two
+- **Sync Layer**: `laneModuleSync.ts` bridges the two with module-aware persistence
+- **Module-Aware Sync**: The sync layer detects module type and loads/saves appropriate snapshots
+  - Rhythm: XOX/Euclidean/M185 snapshots based on `rhythmId`
+  - Melody: Basic/Stochastic snapshots based on `melodyId`
+  - Effect: Delay/Reverb snapshots based on `effectId`
 
 See: `docs/STATE_MANAGEMENT.md`
+
+### Module System
+The project uses a pluggable module architecture:
+
+**Module Categories**:
+- **Rhythm**: Generates trigger events at different subdivisions
+  - `rhythm.xox-basic` - Traditional step sequencer with 64 steps
+  - `rhythm.euclidean` - Bjorklund algorithm for evenly-distributed pulses
+  - `rhythm.m185` - Entry-based sequencer with repeat/hold/skip modes
+- **Melody**: Determines note pitch when rhythm triggers
+  - `melody.melody-basic` - 32-bar sequence with glide and randomization
+  - `melody.stochastic` - Probability-based random note generator
+- **Instrument**: Synthesizes audio from note events
+  - `instrument.synth-simple` - FM synth with ADSR envelope
+- **Effect**: Post-processing audio effects
+  - `effect.delay` - Feedback delay with time/feedback/mix controls
+  - `effect.reverb` - Reverb with room size/decay/mix/pre-delay (async impulse generation)
+  - `effect.none` - No effect (bypass, has placeholder UI)
+
+**Module Storage**:
+Each module category has its own store directory with:
+- Component files (`.svelte`)
+- State stores (writable/derived stores with snapshot functions)
+- Type definitions
+
+**Integration Points**:
+1. **Module Registry** (`src/lib/core/modules/registry.ts`) - Maps definitionIds to module definitions
+2. **Sync Layer** (`laneModuleSync.ts`) - Module-aware state persistence
+3. **Audio Engine** (`engine.ts`) - Module-aware dispatching and audio processing
+4. **UI** (`App.svelte`) - Reactive section building from lane modules
+
+### Keyboard Control System
+The project uses a keyboard-first workflow with tap/hold detection:
+
+**Control Modes**:
+- **Tap Mode**: Quick press (<200ms) of number keys 1-4 increments values
+- **Hold Mode**: Hold number key + arrows for continuous adjustment
+- **Navigation**: Arrow keys navigate sections (up/down) and slides (left/right)
+
+**Key Features**:
+- Tap detection with 200ms threshold (`keyboard.ts`)
+- Dual-mode arrows (navigation when no input selected, adjustment when selected)
+- All increments use 1× step for consistency
+- Special handling for toggles (just toggle) and cyclic options (just cycle)
+- Custom event system for component integration (`keyboard:increment-input`, `keyboard:adjust-input-up/down`)
+
+**Implementation**:
+- `src/lib/core/utils/keyboard.ts` - Global keyboard dispatcher with tap/hold detection
+- `src/lib/core/components/ui/Inputs.svelte` - Input adjustment logic with type classification
+- Input types: numeric (standard increment), selector (navigate indices), toggle (on/off), cyclic (cycle options)
+
+See: `docs/KEYBOARD.md`
 
 ### Audio Engine
 - Per-lane `Tone.Loop` for independent timing
 - Shared `Tone.Transport` for synchronized playback
-- Audio graph: `FMSynth → Gain → Panner → Destination`
+- Audio graph: `FMSynth → [Delay] → [Reverb] → Gain → Panner → Destination`
+- Module-aware dispatching: Audio engine routes to appropriate handlers based on module definitionId
+- Each lane has isolated `LaneRuntime` with independent state and audio nodes
 
 See: `docs/AUDIO_ENGINE.md`
 
@@ -117,13 +180,29 @@ See: `docs/AUDIO_ENGINE.md`
 ### File Organization
 ```
 src/lib/
-├── audio/          # Audio engine (LaneRuntime, AudioManager)
-├── modules/        # Module registry and definitions
-├── services/       # Project persistence (LocalStorage)
-├── stores/         # Svelte stores (state management)
-├── types/          # TypeScript type definitions
-├── *.svelte        # UI components
-└── keyboard.ts     # Keyboard event dispatcher
+├── core/
+│   ├── audio/          # Audio engine (LaneRuntime, AudioManager)
+│   ├── components/     # Core UI components (Header, LaneSelector, etc.)
+│   ├── modules/        # Module registry and definitions
+│   ├── services/       # Project persistence (LocalStorage)
+│   ├── stores/         # Svelte stores (state management)
+│   │   ├── data/       # Project and lane data stores
+│   │   ├── session/    # Session state (transport, lanes, navigation)
+│   │   └── sync/       # Lane module synchronization
+│   ├── types/          # TypeScript type definitions
+│   └── utils/          # Utilities (keyboard, scrolling, constants)
+├── rhythm/
+│   ├── components/     # XOX, Euclidean, M185 sequencer components
+│   └── stores/         # Rhythm module stores
+├── melody/
+│   ├── components/     # Melody and Stochastic sequencer components
+│   └── stores/         # Melody module stores
+├── instrument/
+│   ├── components/     # SimpleSynth component
+│   └── stores/         # Synth state stores
+└── effect/
+    ├── components/     # DelayEffect, ReverbEffect, NoneEffect components
+    └── stores/         # Effect state stores (delay, reverb)
 ```
 
 ### Component Patterns
@@ -131,6 +210,14 @@ src/lib/
 - Use Svelte 5 runes (`$state`, `$derived`, `$effect`)
 - Props should be readonly unless explicitly mutable
 - Emit custom events for parent communication
+
+### UI Patterns
+- **Reactive Sections**: UI sections should be derived from lane state, not hardcoded
+  - Example: `App.svelte` builds `sections` array reactively from `$lanes[$selectedLaneIndex]`
+  - This ensures UI updates when lanes change or modules are swapped
+- **Module Components**: Each module type has its own component (XoxSequencer, EuclideanSequencer, etc.)
+  - Components receive `slides` prop with input definitions
+  - Components are rendered via `{#if}` blocks or dynamic component mapping
 
 ## Important Context Files
 
@@ -143,12 +230,15 @@ When working on specific areas, reference these files:
 - `src/lib/core/stores/sync/laneModuleSync.ts` - Sync layer
 
 **Audio**:
-- `src/lib/audio/LaneRuntime.ts` - Per-lane audio engine
-- `src/lib/audio/AudioManager.ts` - Global audio coordination
+- `src/lib/core/audio/engine.ts` - Audio engine with LaneRuntime and dispatcher logic
 
 **Types**:
-- `src/lib/types.ts` - Shared type definitions
-- `src/lib/types/modules.ts` - Module system types
+- `src/lib/core/types/types.ts` - UI and component types
+- `src/lib/core/types/project.ts` - Project, Lane, and Module types
+- `src/lib/rhythm/types.ts` - Rhythm module types
+- `src/lib/melody/types.ts` - Melody module types
+- `src/lib/instrument/types.ts` - Instrument module types
+- `src/lib/effect/types.ts` - Effect module types
 
 **Documentation**:
 - `docs/ARCHITECTURE.md` - System overview
@@ -171,7 +261,14 @@ Always run `npm run check` before considering work complete.
 ## Testing Workflow
 
 Since this is a browser-based audio app:
-1. Test keyboard controls (arrow keys, space, 1-4, etc.)
+1. Test keyboard controls:
+   - Arrow keys for navigation (sections/slides)
+   - Tap 1-4 for quick increment
+   - Hold 1-4 + arrows for continuous adjustment
+   - Space for play/pause
+   - T for BPM editing
+   - L for module selector
+   - Escape to clear selection
 2. Verify audio playback (Web Audio API)
 3. Check state persistence (LocalStorage)
 4. Test multi-lane functionality
@@ -184,6 +281,30 @@ Since this is a browser-based audio app:
 - Don't break snapshot serialization (keep state JSON-compatible)
 - Don't bypass the sync layer between editor stores and project store
 - Don't forget to update types when changing state shapes
+- **Don't hardcode UI sections** - Always derive sections from lane state reactively
+  - Bad: `let sections = [...]` (static array)
+  - Good: `$: sections = buildSections($lanes[$selectedLaneIndex])`
+- **Don't forget slide definitions** - Module components need `slides` array to render
+  - Empty `slides: []` will result in nothing being displayed
+  - Each module needs at least one slide with input definitions
+- **Module-aware sync** - When adding new modules, update `laneModuleSync.ts`:
+  - Add snapshot imports and type guards
+  - Update `persistLaneState()` to save the module's snapshot
+  - Update `applyLaneState()` to load the module's snapshot
+- **Audio engine integration** - New rhythm/melody modules need:
+  - Dispatcher logic in `tickLane()` to route to the correct handler
+  - Handler function (e.g., `tickLaneEuclidean()`)
+  - Hydration logic in `hydrateLaneRuntime()`
+- **Reverb requires async generation** - `Tone.Reverb.generate()` must be awaited:
+  - `ensureLaneNodes()` is async and awaits reverb generation
+  - Decay and roomSize changes require rebuilding the reverb node (not just updating parameters)
+  - Use `rebuildReverbNode()` when decay or roomSize changes
+  - Only preDelay and wet (mix) can be updated in place
+- **Component mapping for modules** - All module types must be registered:
+  - Update `componentByKind` in both `App.svelte` and `Lane.svelte`
+  - Add imports for new components
+  - Update SectionKind type in `types.ts`
+  - Add template rendering logic in component sections
 
 ## Notes
 

@@ -172,7 +172,7 @@
                       class="meter-segment"
                       data-active={!lane.visuallyMuted &&
                         segmentIndex < Math.floor(lane.right * SEGMENT_COUNT)}
-                    ></span>
+                      ></span>
                   {/each}
                 </div>
               </div>

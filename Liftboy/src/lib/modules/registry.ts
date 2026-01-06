@@ -25,6 +25,19 @@
  */
 
 import type { ModuleCategory, ModuleDefinition } from "../core/types/project";
+import { createSequencerSnapshot } from "../rhythm/stores/sequencer";
+import { createEuclideanSnapshot } from "../rhythm/stores/euclidean";
+import { createM185Snapshot } from "../rhythm/stores/m185";
+import { createMelodySnapshot } from "../melody/stores/melody";
+import { createStochasticSnapshot } from "../melody/stores/stochastic";
+import { createSynthSnapshot } from "../instrument/stores/synth";
+import { createKickSnapshot } from "../instrument/stores/kick";
+import { createHihatSnapshot } from "../instrument/stores/hihat";
+import { createSnareSnapshot } from "../instrument/stores/snare";
+import { createCongaSnapshot } from "../instrument/stores/conga";
+import { createClapSnapshot } from "../instrument/stores/clap";
+import { createDelaySnapshot } from "../effect/stores/delay";
+import { createReverbSnapshot } from "../effect/stores/reverb";
 
 const moduleRegistry = new Map<string, ModuleDefinition>();
 
@@ -69,11 +82,23 @@ function bootstrapDefinitions() {
       label: "XOX Basic",
       version: 1,
       description: "16-step trigger grid",
-      defaultState: {
-        length: 16,
-        density: 0.5,
-        shuffle: 0,
-      },
+      defaultState: createSequencerSnapshot(),
+    },
+    {
+      id: "rhythm.euclidean",
+      category: "rhythm",
+      label: "Euclidean",
+      version: 1,
+      description: "Algorithmic rhythm generator",
+      defaultState: createEuclideanSnapshot(),
+    },
+    {
+      id: "rhythm.m185",
+      category: "rhythm",
+      label: "M185 Sequencer",
+      version: 1,
+      description: "Roland 100m style sequencer",
+      defaultState: createM185Snapshot(),
     },
     {
       id: "melody.melody-basic",
@@ -81,11 +106,15 @@ function bootstrapDefinitions() {
       label: "Melody Blocks",
       version: 1,
       description: "Bar-based pitch lane",
-      defaultState: {
-        length: 8,
-        spread: 2,
-        randomize: 0,
-      },
+      defaultState: createMelodySnapshot(),
+    },
+    {
+      id: "melody.stochastic",
+      category: "melody",
+      label: "Stochastic",
+      version: 1,
+      description: "Random note generator",
+      defaultState: createStochasticSnapshot(),
     },
     {
       id: "instrument.synth-simple",
@@ -93,13 +122,47 @@ function bootstrapDefinitions() {
       label: "Simple Synth",
       version: 1,
       description: "Single voice synth",
-      defaultState: {
-        wave: "amtriangle",
-        attack: 0.05,
-        decay: 0.2,
-        sustain: 0.2,
-        release: 1.5,
-      },
+      defaultState: createSynthSnapshot(),
+    },
+    {
+      id: "instrument.kick",
+      category: "instrument",
+      label: "Kick Drum",
+      version: 1,
+      description: "Bass drum synthesizer",
+      defaultState: createKickSnapshot(),
+    },
+    {
+      id: "instrument.hihat",
+      category: "instrument",
+      label: "Hi-Hat",
+      version: 1,
+      description: "Metallic hi-hat synthesizer",
+      defaultState: createHihatSnapshot(),
+    },
+    {
+      id: "instrument.snare",
+      category: "instrument",
+      label: "Snare Drum",
+      version: 1,
+      description: "Snare drum synthesizer",
+      defaultState: createSnareSnapshot(),
+    },
+    {
+      id: "instrument.conga",
+      category: "instrument",
+      label: "Conga Drum",
+      version: 1,
+      description: "Tuned conga drum synthesizer",
+      defaultState: createCongaSnapshot(),
+    },
+    {
+      id: "instrument.clap",
+      category: "instrument",
+      label: "Clap",
+      version: 1,
+      description: "Hand clap synthesizer",
+      defaultState: createClapSnapshot(),
     },
     {
       id: "effect.none",
@@ -108,6 +171,22 @@ function bootstrapDefinitions() {
       version: 1,
       description: "Pass-through",
       defaultState: {},
+    },
+    {
+      id: "effect.delay",
+      category: "effect",
+      label: "Delay",
+      version: 1,
+      description: "Feedback delay effect",
+      defaultState: createDelaySnapshot(),
+    },
+    {
+      id: "effect.reverb",
+      category: "effect",
+      label: "Reverb",
+      version: 1,
+      description: "Reverb effect",
+      defaultState: createReverbSnapshot(),
     },
   ];
 

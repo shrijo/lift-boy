@@ -43,12 +43,15 @@ graph LR
 
 | Key | Event | Action | Context |
 |-----|-------|--------|---------|
-| `1` | `keyboard:select-input` (detail: 0) | Select first input | Global |
-| `2` | `keyboard:select-input` (detail: 1) | Select second input | Global |
-| `3` | `keyboard:select-input` (detail: 2) | Select third input | Global |
-| `4` | `keyboard:select-input` (detail: 3) | Select fourth input | Global |
+| `1` (tap) | `keyboard:increment-input` (detail: 0) | Increment first input value | Global |
+| `2` (tap) | `keyboard:increment-input` (detail: 1) | Increment second input value | Global |
+| `3` (tap) | `keyboard:increment-input` (detail: 2) | Increment third input value | Global |
+| `4` (tap) | `keyboard:increment-input` (detail: 3) | Increment fourth input value | Global |
+| `1-4` (hold) | `keyboard:select-input` | Select input for arrow adjustment | Global |
 | `t` or `T` | `keyboard:select-bpm` | Select BPM input | Global |
 | `Escape` | `keyboard:clear-selection` | Clear all selections | Global |
+
+**Note:** Tap = quick press/release (<200ms), Hold = press and keep held while using arrows
 
 ## State Management
 
@@ -143,19 +146,22 @@ sequenceDiagram
 ```typescript
 {
   inputIndex?: number  // If input selected, which one (0-3)
+  magnitude?: number   // Always 1 for standard increments
 }
 ```
 
 **Behavior**:
 - If `inputIndex` present → Component adjusts that input's value
 - If no `inputIndex` → Component handles as navigation
+- All arrow keys use the same increment size
 
 **Example Usage**:
 ```typescript
 onKeyboardEvent('arrow-up', (detail) => {
   if (detail?.inputIndex !== undefined) {
     // Adjust input value
-    adjustInputValue(detail.inputIndex, +1);
+    const magnitude = detail.magnitude ?? 1;
+    adjustInputValue(detail.inputIndex, +1 * magnitude);
   } else {
     // Navigate to previous section
     navigateSection(-1);
@@ -165,7 +171,7 @@ onKeyboardEvent('arrow-up', (detail) => {
 
 ### keyboard:select-input
 
-**Dispatched When**: Number key 1-4 pressed
+**Dispatched When**: Number key 1-4 held down
 
 **Event Detail**:
 ```typescript
@@ -174,12 +180,32 @@ onKeyboardEvent('arrow-up', (detail) => {
 }
 ```
 
-**Behavior**: Component highlights specified input for editing
+**Behavior**: Component highlights specified input for editing with arrow keys
 
 **Example Usage**:
 ```typescript
 onKeyboardEvent('select-input', (detail) => {
   highlightedInput = detail.inputIndex;
+});
+```
+
+### keyboard:increment-input
+
+**Dispatched When**: Number key 1-4 tapped (quick press/release <200ms)
+
+**Event Detail**:
+```typescript
+{
+  inputIndex: number  // 0-3
+}
+```
+
+**Behavior**: Component increments the specified input's value automatically
+
+**Example Usage**:
+```typescript
+onKeyboardEvent('increment-input', (detail) => {
+  adjustInputValue(detail.inputIndex, +1);
 });
 ```
 
@@ -232,6 +258,53 @@ onKeyboardEvent('toggle-playback', () => {
   }
 });
 ```
+
+## Input Adjustment System
+
+The keyboard system supports **two modes of input adjustment** with intelligent handling based on input type.
+
+### Adjustment Modes
+
+**1. Tap Mode**: Quick tap of number key (1-4)
+- Emits `keyboard:increment-input` event
+- Automatically increments value by 1× step
+- Works for all input types
+
+**2. Arrow Mode**: Hold number key + press arrow
+- Emits `keyboard:adjust-input-up/down` event
+- All arrow keys use 1× step for standard increments
+- Up/Down arrows increment/decrement, Left/Right arrows decrement/increment
+
+### Input Type Behavior
+
+Different input types respond differently:
+
+| Input Type | Examples | Tap Behavior | Any Arrow |
+|------------|----------|--------------|-----------|
+| **Numeric** | Duration, Harmonicity, Volume, Step Index, Bar Index | +1× step | ±1× step |
+| **Toggle** | Active On/Off, Glide On/Off | Toggle | Toggle |
+| **Cyclic** | Wave, Clock, Order | Cycle +1 | Cycle ±1 |
+
+### Examples
+
+**Numeric Value (Step Duration)**:
+- Base step size: 0.25
+- Tap "3": Duration increases by 0.25
+- Hold "3" + Any Arrow: Duration ±0.25
+
+**Selector (Step Index)**:
+- Tap "1": Move forward 1 step
+- Hold "1" + Any Arrow: Move ±1 step
+
+**Toggle (Step Active)**:
+- Tap "2": Toggle On → Off or Off → On
+- Hold "2" + Any Arrow: Toggle
+
+**Cyclic (Wave Type)**:
+- Options: sine, square, triangle, sawtooth
+- Tap "1": Cycle to next wave
+- Hold "1" + Right/Up: Cycle to next wave
+- Hold "1" + Left/Down: Cycle to previous wave
 
 ## Component Integration
 
@@ -423,7 +496,8 @@ export function destroyKeyboard() {
 onKeyboardEvent('arrow-up', (detail) => {
   if (detail?.inputIndex !== undefined) {
     // Input editing mode
-    adjustInputValue(detail.inputIndex, +1);
+    const magnitude = detail.magnitude ?? 1;
+    adjustInputValue(detail.inputIndex, +1 * magnitude);
   } else {
     // Navigation mode
     navigateSection(-1);
@@ -468,6 +542,39 @@ onKeyboardEvent('arrow-up', (detail) => {
     {bpm} BPM (press T to edit)
   </div>
 {/if}
+```
+
+### Pattern 4: Tap to Increment
+
+**Scenario**: Quick tap of number key increments value automatically.
+
+```typescript
+onKeyboardEvent('increment-input', (detail) => {
+  // Automatically increment the tapped input
+  if (detail.inputIndex !== undefined) {
+    adjustInputValue(detail.inputIndex, +1);
+  }
+});
+```
+
+**Complete Example with Tap + Hold**:
+```typescript
+// Handle both tap and hold-with-arrows
+onKeyboardEvent('increment-input', (detail) => {
+  // Quick tap - increment
+  adjustInputValue(detail.inputIndex, +1);
+});
+
+onKeyboardEvent('adjust-input-up', (detail) => {
+  // Hold + arrow - adjust with magnitude
+  const magnitude = detail.magnitude ?? 1;
+  adjustInputValue(detail.inputIndex, +1 * magnitude);
+});
+
+onKeyboardEvent('adjust-input-down', (detail) => {
+  const magnitude = detail.magnitude ?? 1;
+  adjustInputValue(detail.inputIndex, -1 * magnitude);
+});
 ```
 
 ## Accessibility

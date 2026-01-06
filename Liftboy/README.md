@@ -4,14 +4,28 @@ A browser-based polyphonic audio sequencer with keyboard-first workflow. Built w
 
 ## Features
 
-### XOX Step Sequencer
+### Rhythm Modules
+**XOX Step Sequencer**
 - 64-step trigger pattern with configurable length (1-64)
 - Per-step duration (0.25-4 steps)
 - Per-step probability (0-100%)
 - Clock subdivisions: 1/4, 1/8, 1/16, 1/32 notes
 - Playback modes: forward, backward, random
 
-### Melody Sequencer
+**Euclidean Sequencer**
+- Bjorklund algorithm for evenly-distributed pulses
+- 1-32 steps with configurable pulse count
+- Rotation offset for pattern variation
+- Perfect for generating polyrhythmic patterns
+
+**M185 Sequencer**
+- Entry-based trigger sequencing
+- Three modes per entry: repeat, hold, skip
+- Configurable steps per entry
+- Ideal for complex, evolving rhythms
+
+### Melody Modules
+**Basic Melody Sequencer**
 - 32-bar pitch sequence
 - Scale-based note values (0-7 → major scale)
 - Per-bar glide/portamento toggle
@@ -19,19 +33,42 @@ A browser-based polyphonic audio sequencer with keyboard-first workflow. Built w
 - Skip divisor (advance melody every N triggers)
 - Playback modes: forward, backward, random
 
-### FM Synthesizer
+**Stochastic Sequencer**
+- Probability-based random note generation
+- Configurable note range (min/max)
+- Change probability (0-100%)
+- Notes persist until probability triggers change
+
+### Instrument Module
+**FM Synthesizer**
 - 5 waveforms: sine, square, triangle, sawtooth, AM triangle
 - Harmonicity modulation (0-2)
 - Modulation index (0-10)
 - ADSR envelope
 - Portamento/glide control
 
+### Effect Modules
+**Delay Effect**
+- Feedback delay with time control (0-2s)
+- Feedback amount (0-95%)
+- Wet/dry mix control
+
+**Reverb Effect**
+- Room size simulation (0-100%)
+- Decay time (0-10s)
+- Wet/dry mix control
+- Pre-delay (0-100ms)
+
+**No Effect**
+- Bypass mode (no audio processing)
+- Placeholder UI for module switching
+
 ### Multi-Lane Architecture
-- 1-12 simultaneous voices
-- Independent sequencer + melody + synth per lane
+- 1-12 simultaneous voices running in parallel
+- Independent rhythm + melody + instrument + effect per lane
 - Per-lane volume, pan, and mute/solo
+- Hot-swappable module selection per lane
 - Centered carousel lane selector with auto-selection
-- Hot-swappable lane selection
 
 ### Project Management
 - Multi-project support
@@ -40,11 +77,17 @@ A browser-based polyphonic audio sequencer with keyboard-first workflow. Built w
 - Auto-save on changes
 
 ### Keyboard Controls
-- Arrow keys: Navigate sections and slides
+**Navigation**:
+- Arrow keys: Navigate sections (up/down) and slides (left/right)
 - Space: Play/Pause
-- 1-4: Select input for editing
-- T: Select BPM
 - Escape: Clear selection
+
+**Input Editing**:
+- **Tap** 1-4: Increment input value
+- **Hold** 1-4 + Arrows: Adjust input value
+- T: Select BPM for editing
+
+**Note**: Tap = quick press (<200ms), Hold = press and keep held while using arrows
 
 Full keyboard reference in [docs/KEYBOARD.md](docs/KEYBOARD.md)
 
@@ -88,13 +131,18 @@ Visit [http://localhost:5173](http://localhost:5173)
 Liftboy/
 ├── src/
 │   ├── lib/
-│   │   ├── audio/          # Audio engine (Tone.js integration)
-│   │   ├── modules/        # Module registry
-│   │   ├── services/       # Project persistence
-│   │   ├── stores/         # Svelte stores (state management)
-│   │   ├── types/          # TypeScript type definitions
-│   │   ├── *Sequencer.svelte   # UI components
-│   │   └── keyboard.ts     # Keyboard event dispatcher
+│   │   ├── core/
+│   │   │   ├── audio/          # Audio engine (Tone.js integration)
+│   │   │   ├── components/     # Core UI components
+│   │   │   ├── modules/        # Module registry
+│   │   │   ├── services/       # Project persistence
+│   │   │   ├── stores/         # Svelte stores (state management)
+│   │   │   ├── types/          # TypeScript type definitions
+│   │   │   └── utils/          # Utilities (keyboard, scrolling)
+│   │   ├── rhythm/         # Rhythm module components & stores
+│   │   ├── melody/         # Melody module components & stores
+│   │   ├── instrument/     # Instrument module components & stores
+│   │   └── effect/         # Effect module components & stores
 │   ├── App.svelte          # Root component
 │   └── main.ts             # Entry point
 ├── docs/                   # Documentation
@@ -173,11 +221,13 @@ See [State Management docs](docs/STATE_MANAGEMENT.md) for details.
 ### Lane-Based Multi-Voice
 
 Each lane is an independent voice with its own:
-- Rhythm module (sequencer)
-- Melody module
-- Instrument module (synth)
-- Effect module (future)
+- Rhythm module (XOX, Euclidean, or M185 sequencer)
+- Melody module (Basic melody or Stochastic generator)
+- Instrument module (FM synth)
+- Effect module (Delay or Reverb)
 - Mixer settings (volume, pan, mute/solo)
+
+Lanes run in parallel with isolated audio processing and independent module states.
 
 See [ADR 0001](docs/adr/0001-lane-architecture.md) for rationale.
 
@@ -193,7 +243,8 @@ See [State Management docs](docs/STATE_MANAGEMENT.md#synchronization-layer) for 
 
 - Per-lane Tone.Loop for independent timing
 - Shared Tone.Transport for synchronized playback
-- Audio graph: `FMSynth → Gain → Panner → Destination`
+- Audio graph: `FMSynth → [Delay] → [Reverb] → Gain → Panner → Destination`
+- Module-aware dispatching routes to appropriate rhythm/melody handlers
 - Sample-accurate MIDI-based note triggering
 
 See [Audio Engine docs](docs/AUDIO_ENGINE.md) for details.
@@ -204,11 +255,13 @@ See [Audio Engine docs](docs/AUDIO_ENGINE.md) for details.
 
 Lift-Boy is designed for keyboard-first workflow:
 
-1. Use **arrow keys** to navigate sections (XOX, Melody, Synth)
-2. Press **1-4** to select an input for editing
-3. Use **up/down arrows** to adjust the selected input
+1. Use **arrow keys** to navigate sections (XOX, Melody, Synth) and slides
+2. **Tap** number keys **1-4** to quickly increment values
+3. **Hold** number keys **1-4** + use **arrows** to adjust values up/down
 4. Press **Space** to play/pause
-5. Press **Escape** to clear selection
+5. Press **T** to edit BPM
+6. Press **Escape** to clear selection
+7. Press **L** to open module selector for hot-swapping modules
 
 ### Creating Patterns
 

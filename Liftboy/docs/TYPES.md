@@ -484,15 +484,38 @@ Custom keyboard event types.
 
 ```typescript
 type KeyboardEventType =
-  | 'arrow-up'
-  | 'arrow-down'
-  | 'arrow-left'
-  | 'arrow-right'
-  | 'toggle-playback'
+  | 'scroll-next-section'
+  | 'scroll-prev-section'
+  | 'scroll-next-slide'
+  | 'scroll-prev-slide'
   | 'select-input'
+  | 'clear-input-selection'
+  | 'adjust-input-up'
+  | 'adjust-input-down'
+  | 'increment-input'
   | 'select-bpm'
-  | 'clear-selection';
+  | 'clear-bpm-selection'
+  | 'adjust-bpm-up'
+  | 'adjust-bpm-down'
+  | 'toggle-playback'
+  | 'open-module-selector';
 ```
+
+**Event Detail Interface**:
+```typescript
+interface KeyboardEventDetail {
+  type: KeyboardEventType;
+  inputIndex?: number;  // Which input (0-3) is selected
+  magnitude?: number;   // Increment size (always 1 currently)
+}
+```
+
+**Key Events**:
+- `increment-input`: Emitted on quick tap (<200ms) of number keys 1-4
+- `adjust-input-up/down`: Emitted when holding number key + pressing arrows
+- `scroll-*`: Navigation events when no input is selected
+- `select-input`: Emitted on number key press (hold mode)
+- `clear-input-selection`: Emitted on number key release
 
 ## Utility Types
 

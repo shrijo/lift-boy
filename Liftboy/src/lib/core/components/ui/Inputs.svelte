@@ -46,6 +46,99 @@
         adjustRelease,
     } from '../../../instrument/stores/synth';
     import {
+        kickSettings,
+        adjustPitch as adjustKickPitch,
+        adjustPitchDecay as adjustKickPitchDecay,
+        adjustTone as adjustKickTone,
+        adjustDecay as adjustKickDecay,
+    } from '../../../instrument/stores/kick';
+    import {
+        hihatSettings,
+        adjustTone as adjustHihatTone,
+        adjustDecay as adjustHihatDecay,
+        adjustResonance,
+    } from '../../../instrument/stores/hihat';
+    import {
+        snareSettings,
+        adjustTone as adjustSnareTone,
+        adjustSnap,
+        adjustDecay as adjustSnareDecay,
+    } from '../../../instrument/stores/snare';
+    import {
+        congaSettings,
+        adjustPitch as adjustCongaPitch,
+        adjustPitchDecay as adjustCongaPitchDecay,
+        adjustTone as adjustCongaTone,
+        adjustDecay as adjustCongaDecay,
+    } from '../../../instrument/stores/conga';
+    import {
+        clapSettings,
+        adjustTone as adjustClapTone,
+        adjustDecay as adjustClapDecay,
+        adjustSpread,
+    } from '../../../instrument/stores/clap';
+    import {
+        euclideanSteps,
+        euclideanPulses,
+        euclideanRotation,
+        euclideanClockLabel,
+        euclideanOrderLabel,
+        adjustEuclideanSteps,
+        adjustEuclideanPulses,
+        adjustEuclideanRotation,
+        cycleEuclideanClock,
+        cycleEuclideanOrder,
+    } from '../../../rhythm/stores/euclidean';
+    import {
+        m185Entries,
+        activeEntry,
+        selectedEntry,
+        m185Length,
+        m185ClockLabel,
+        m185OrderLabel,
+        modeLabel,
+        incrementSelectedEntry,
+        adjustEntrySteps,
+        cycleEntryMode,
+        adjustM185Length,
+        cycleM185Clock,
+        cycleM185Order,
+    } from '../../../rhythm/stores/m185';
+    import {
+        stochasticMinNote,
+        stochasticMaxNote,
+        stochasticChangeProb,
+        stochasticCurrentNote,
+        adjustStochasticMin,
+        adjustStochasticMax,
+        adjustStochasticChangeProb,
+    } from '../../../melody/stores/stochastic';
+    import {
+        delayTime,
+        delayFeedback,
+        delayMix,
+        delayTimeLabel,
+        delayFeedbackLabel,
+        delayMixLabel,
+        adjustDelayTime,
+        adjustDelayFeedback,
+        adjustDelayMix,
+    } from '../../../effect/stores/delay';
+    import {
+        reverbRoomSize,
+        reverbDecay,
+        reverbMix,
+        reverbPreDelay,
+        reverbRoomLabel,
+        reverbDecayLabel,
+        reverbMixLabel,
+        reverbPreDelayLabel,
+        adjustReverbRoomSize,
+        adjustReverbDecay,
+        adjustReverbMix,
+        adjustReverbPreDelay,
+    } from '../../../effect/stores/reverb';
+    import {
         laneSelectorActive,
         laneSelectorSlide,
         laneCount,
@@ -102,6 +195,38 @@
         release: $synthSettings.release,
     } satisfies SynthState;
 
+    $: kickContext = {
+        pitch: $kickSettings.pitch,
+        pitchDecay: $kickSettings.pitchDecay,
+        tone: $kickSettings.tone,
+        decay: $kickSettings.decay,
+    };
+
+    $: hihatContext = {
+        tone: $hihatSettings.tone,
+        decay: $hihatSettings.decay,
+        resonance: $hihatSettings.resonance,
+    };
+
+    $: snareContext = {
+        tone: $snareSettings.tone,
+        snap: $snareSettings.snap,
+        decay: $snareSettings.decay,
+    };
+
+    $: congaContext = {
+        pitch: $congaSettings.pitch,
+        pitchDecay: $congaSettings.pitchDecay,
+        tone: $congaSettings.tone,
+        decay: $congaSettings.decay,
+    };
+
+    $: clapContext = {
+        tone: $clapSettings.tone,
+        decay: $clapSettings.decay,
+        spread: $clapSettings.spread,
+    };
+
     $: laneContext = {
         total: $laneCount,
         laneIndex: $laneSelectedIndex,
@@ -112,6 +237,50 @@
         laneData: Lane | undefined;
     };
 
+    $: euclideanContext = {
+        steps: $euclideanSteps,
+        pulses: $euclideanPulses,
+        rotation: $euclideanRotation,
+        clockValue: $euclideanClockLabel,
+        orderValue: $euclideanOrderLabel,
+    };
+
+    $: m185Context = {
+        entryIndex: $selectedEntry,
+        entryData: $activeEntry,
+        lengthValue: $m185Length,
+        clockValue: $m185ClockLabel,
+        orderValue: $m185OrderLabel,
+        modeValue: $modeLabel,
+    };
+
+    $: stochasticContext = {
+        minNote: $stochasticMinNote,
+        maxNote: $stochasticMaxNote,
+        changeProb: $stochasticChangeProb,
+        currentNote: $stochasticCurrentNote,
+    };
+
+    $: delayContext = {
+        time: $delayTime,
+        feedback: $delayFeedback,
+        mix: $delayMix,
+        timeLabel: $delayTimeLabel,
+        feedbackLabel: $delayFeedbackLabel,
+        mixLabel: $delayMixLabel,
+    };
+
+    $: reverbContext = {
+        roomSize: $reverbRoomSize,
+        decay: $reverbDecay,
+        mix: $reverbMix,
+        preDelay: $reverbPreDelay,
+        roomLabel: $reverbRoomLabel,
+        decayLabel: $reverbDecayLabel,
+        mixLabel: $reverbMixLabel,
+        preDelayLabel: $reverbPreDelayLabel,
+    };
+
     $: entries = inputs.map((meta, index) => ({
         meta,
         display: formatDisplay(kind, slideIndex, index, {
@@ -119,6 +288,11 @@
             melody: melodyContext,
             synth: synthContext,
             lane: laneContext,
+            euclidean: euclideanContext,
+            m185: m185Context,
+            stochastic: stochasticContext,
+            delay: delayContext,
+            reverb: reverbContext,
         }),
     }));
 
@@ -161,9 +335,14 @@
                 laneIndex: number;
                 laneData: Lane | undefined;
             };
+            euclidean: any;
+            m185: any;
+            stochastic: any;
+            delay: any;
+            reverb: any;
         }
     ): string {
-        const { xox, melody, synth, lane } = context;
+        const { xox, melody, synth, lane, euclidean, m185, stochastic, delay, reverb } = context;
 
         if (kind === 'lane') {
             if (pageIndex === 0) {
@@ -246,6 +425,111 @@
             }
         }
 
+        if (kind === 'euclidean') {
+            if (pageIndex === 0) {
+                switch (inputIndex) {
+                    case 0:
+                        return `${euclidean.steps} steps`;
+                    case 1:
+                        return `${euclidean.pulses} pulses`;
+                    case 2:
+                        return `${euclidean.rotation} offset`;
+                    default:
+                        return '—';
+                }
+            }
+
+            switch (inputIndex) {
+                case 0:
+                    return euclidean.clockValue;
+                case 1:
+                    return euclidean.orderValue;
+                default:
+                    return '—';
+            }
+        }
+
+        if (kind === 'm185') {
+            if (pageIndex === 0) {
+                switch (inputIndex) {
+                    case 0:
+                        return String(m185.entryIndex + 1).padStart(2, '0');
+                    case 1:
+                        return `${m185.entryData?.steps ?? 1} steps`;
+                    case 2:
+                        return (m185.modeValue ?? 'repeat').charAt(0).toUpperCase() + (m185.modeValue ?? 'repeat').slice(1);
+                    default:
+                        return '—';
+                }
+            }
+
+            switch (inputIndex) {
+                case 0:
+                    return `${m185.lengthValue} entries`;
+                case 1:
+                    return m185.clockValue;
+                case 2:
+                    return m185.orderValue;
+                default:
+                    return '—';
+            }
+        }
+
+        if (kind === 'stochastic') {
+            if (pageIndex === 0) {
+                switch (inputIndex) {
+                    case 0:
+                        return `${stochastic.minNote}`;
+                    case 1:
+                        return `${stochastic.maxNote}`;
+                    case 2:
+                        return `${stochastic.changeProb}%`;
+                    case 3:
+                        return `${stochastic.currentNote}`;
+                    default:
+                        return '—';
+                }
+            }
+
+            return '—';
+        }
+
+        if (kind === 'delay') {
+            if (pageIndex === 0) {
+                switch (inputIndex) {
+                    case 0:
+                        return delay.timeLabel;
+                    case 1:
+                        return delay.feedbackLabel;
+                    case 2:
+                        return delay.mixLabel;
+                    default:
+                        return '—';
+                }
+            }
+
+            return '—';
+        }
+
+        if (kind === 'reverb') {
+            if (pageIndex === 0) {
+                switch (inputIndex) {
+                    case 0:
+                        return reverb.roomLabel;
+                    case 1:
+                        return reverb.decayLabel;
+                    case 2:
+                        return reverb.mixLabel;
+                    case 3:
+                        return reverb.preDelayLabel;
+                    default:
+                        return '—';
+                }
+            }
+
+            return '—';
+        }
+
         if (pageIndex === 0) {
             switch (inputIndex) {
                 case 0:
@@ -309,6 +593,116 @@
         return `${label}${amount}`;
     }
 
+    type InputType = 'numeric' | 'selector' | 'toggle' | 'cyclic';
+
+    function getInputType(kind: InputKind, slideIndex: number, inputIndex: number): InputType {
+        // XOX slide 0
+        if (kind === 'xox' && slideIndex === 0) {
+            if (inputIndex === 0) return 'selector'; // Step index
+            if (inputIndex === 1) return 'toggle';   // Active
+            if (inputIndex === 2) return 'numeric';  // Duration
+            if (inputIndex === 3) return 'numeric';  // Probability
+        }
+
+        // XOX slide 1
+        if (kind === 'xox' && slideIndex === 1) {
+            if (inputIndex === 0) return 'numeric';  // Length
+            if (inputIndex === 1) return 'cyclic';   // Clock
+            if (inputIndex === 2) return 'cyclic';   // Order
+        }
+
+        // Melody slide 0
+        if (kind === 'melody' && slideIndex === 0) {
+            if (inputIndex === 0) return 'selector'; // Bar index
+            if (inputIndex === 1) return 'numeric';  // Value
+            if (inputIndex === 2) return 'toggle';   // Glide
+            if (inputIndex === 3) return 'toggle';   // Randomize
+        }
+
+        // Melody slide 1
+        if (kind === 'melody' && slideIndex === 1) {
+            if (inputIndex === 0) return 'numeric';  // Length
+            if (inputIndex === 1) return 'cyclic';   // Skip
+            if (inputIndex === 2) return 'cyclic';   // Order
+        }
+
+        // Synth slide 0
+        if (kind === 'synth' && slideIndex === 0) {
+            if (inputIndex === 0) return 'cyclic';   // Wave
+            if (inputIndex === 1) return 'numeric';  // Harmonicity
+            if (inputIndex === 2) return 'cyclic';   // Modulation
+            if (inputIndex === 3) return 'numeric';  // Portamento
+        }
+
+        // Synth slide 1
+        if (kind === 'synth' && slideIndex === 1) {
+            return 'numeric'; // All ADSR values
+        }
+
+        // Euclidean slide 0
+        if (kind === 'euclidean' && slideIndex === 0) {
+            return 'numeric'; // Steps, Pulses, Rotation
+        }
+
+        // Euclidean slide 1
+        if (kind === 'euclidean' && slideIndex === 1) {
+            if (inputIndex === 0) return 'cyclic';   // Clock
+            if (inputIndex === 1) return 'cyclic';   // Order
+        }
+
+        // M185 slide 0
+        if (kind === 'm185' && slideIndex === 0) {
+            if (inputIndex === 0) return 'selector'; // Entry index
+            if (inputIndex === 1) return 'numeric';  // Steps
+            if (inputIndex === 2) return 'cyclic';   // Mode
+        }
+
+        // M185 slide 1
+        if (kind === 'm185' && slideIndex === 1) {
+            if (inputIndex === 0) return 'numeric';  // Length
+            if (inputIndex === 1) return 'cyclic';   // Clock
+            if (inputIndex === 2) return 'cyclic';   // Order
+        }
+
+        // Stochastic slide 0
+        if (kind === 'stochastic' && slideIndex === 0) {
+            if (inputIndex === 0) return 'numeric';  // Min note
+            if (inputIndex === 1) return 'numeric';  // Max note
+            if (inputIndex === 2) return 'numeric';  // Change prob
+            if (inputIndex === 3) return 'numeric';  // Current note (read-only but numeric)
+        }
+
+        // Delay slide 0
+        if (kind === 'delay' && slideIndex === 0) {
+            return 'numeric'; // Time, Feedback, Mix
+        }
+
+        // Reverb slide 0
+        if (kind === 'reverb' && slideIndex === 0) {
+            return 'numeric'; // Room, Decay, Mix, PreDelay
+        }
+
+        // Lane slide 0
+        if (kind === 'lane' && slideIndex === 0) {
+            if (inputIndex === 0) return 'selector'; // Lane index
+            if (inputIndex === 1) return 'cyclic';   // Mode
+            if (inputIndex === 2) return 'numeric';  // Volume
+            if (inputIndex === 3) return 'numeric';  // Pan
+        }
+
+        // Lane slide 1
+        if (kind === 'lane' && slideIndex === 1) {
+            if (inputIndex === 0) return 'numeric';  // Lane count
+        }
+
+        // Drum instruments (kick, hihat, snare, conga, clap) - all numeric
+        if (['kick', 'hihat', 'snare', 'conga', 'clap'].includes(kind)) {
+            return 'numeric';
+        }
+
+        return 'numeric'; // Default
+    }
+
     function handleKeyboard(detail: KeyboardEventDetail) {
         if (!isActive) return;
 
@@ -321,41 +715,59 @@
             case 'clear-input-selection':
                 selectedInput = null;
                 break;
+            case 'increment-input':
+                if (typeof detail.inputIndex === 'number') {
+                    selectedInput = detail.inputIndex < inputs.length ? detail.inputIndex : null;
+                    if (selectedInput !== null) {
+                        adjustSelected(1, 1); // direction=1 (increment), magnitude=1
+                    }
+                }
+                break;
             case 'adjust-input-up':
             case 'adjust-input-down':
                 if (selectedInput === null) return;
                 if (typeof detail.inputIndex === 'number') {
                     selectedInput = detail.inputIndex;
                 }
-                adjustSelected(detail.type === 'adjust-input-up' ? 1 : -1);
+                const magnitude = detail.magnitude ?? 1;
+                adjustSelected(detail.type === 'adjust-input-up' ? 1 : -1, magnitude);
                 break;
         }
     }
 
-    function adjustSelected(direction: 1 | -1) {
+    function adjustSelected(direction: 1 | -1, magnitude: number = 1) {
         if (selectedInput === null) return;
+
+        // Determine input type and adjust magnitude accordingly
+        const inputType = getInputType(kind, slideIndex, selectedInput);
+        let finalMagnitude = magnitude;
+
+        // Override magnitude for special cases
+        if (inputType === 'toggle' || inputType === 'cyclic') {
+            finalMagnitude = 1; // Toggles and cyclic options ignore magnitude
+        }
 
         if (kind === 'lane') {
             if (slideIndex === 0) {
                 switch (selectedInput) {
                     case 0:
-                        incrementSelectedLane(direction);
+                        incrementSelectedLane(direction * finalMagnitude);
                         break;
                     case 1:
                         cycleLaneMode(direction);
                         break;
                     case 2:
-                        adjustLaneVolume(direction);
+                        adjustLaneVolume(direction * finalMagnitude);
                         break;
                     case 3:
-                        adjustLanePan(direction);
+                        adjustLanePan(direction * finalMagnitude);
                         break;
                 }
                 return;
             }
 
             if (slideIndex === 1 && selectedInput === 0) {
-                adjustLaneCount(direction);
+                adjustLaneCount(direction * finalMagnitude);
             }
             return;
         }
@@ -367,13 +779,13 @@
                         cycleWave(direction);
                         break;
                     case 1:
-                        adjustHarmonicity(direction);
+                        adjustHarmonicity(direction * finalMagnitude);
                         break;
                     case 2:
                         cycleModulation(direction);
                         break;
                     case 3:
-                        adjustPortamento(direction);
+                        adjustPortamento(direction * finalMagnitude);
                         break;
                 }
                 return;
@@ -381,16 +793,16 @@
 
             switch (selectedInput) {
                 case 0:
-                    adjustAttack(direction);
+                    adjustAttack(direction * finalMagnitude);
                     break;
                 case 1:
-                    adjustDecay(direction);
+                    adjustDecay(direction * finalMagnitude);
                     break;
                 case 2:
-                    adjustSustain(direction);
+                    adjustSustain(direction * finalMagnitude);
                     break;
                 case 3:
-                    adjustRelease(direction);
+                    adjustRelease(direction * finalMagnitude);
                     break;
             }
             return;
@@ -400,10 +812,10 @@
             if (slideIndex === 0) {
                 switch (selectedInput) {
                     case 0:
-                        incrementSelectedBar(direction);
+                        incrementSelectedBar(direction * finalMagnitude);
                         break;
                     case 1:
-                        adjustBarValue(direction);
+                        adjustBarValue(direction * finalMagnitude);
                         break;
                     case 2:
                         setBarGlide(direction > 0);
@@ -417,7 +829,7 @@
 
             switch (selectedInput) {
                 case 0:
-                    adjustMelodyLength(direction);
+                    adjustMelodyLength(direction * finalMagnitude);
                     break;
                 case 1:
                     cycleSkip(direction);
@@ -429,19 +841,136 @@
             return;
         }
 
+        if (kind === 'euclidean') {
+            if (slideIndex === 0) {
+                switch (selectedInput) {
+                    case 0:
+                        adjustEuclideanSteps(direction * finalMagnitude);
+                        break;
+                    case 1:
+                        adjustEuclideanPulses(direction * finalMagnitude);
+                        break;
+                    case 2:
+                        adjustEuclideanRotation(direction * finalMagnitude);
+                        break;
+                }
+                return;
+            }
+
+            switch (selectedInput) {
+                case 0:
+                    cycleEuclideanClock(direction);
+                    break;
+                case 1:
+                    cycleEuclideanOrder(direction);
+                    break;
+            }
+            return;
+        }
+
+        if (kind === 'm185') {
+            if (slideIndex === 0) {
+                switch (selectedInput) {
+                    case 0:
+                        incrementSelectedEntry(direction * finalMagnitude);
+                        break;
+                    case 1:
+                        adjustEntrySteps(direction * finalMagnitude);
+                        break;
+                    case 2:
+                        cycleEntryMode(direction);
+                        break;
+                }
+                return;
+            }
+
+            switch (selectedInput) {
+                case 0:
+                    adjustM185Length(direction * finalMagnitude);
+                    break;
+                case 1:
+                    cycleM185Clock(direction);
+                    break;
+                case 2:
+                    cycleM185Order(direction);
+                    break;
+            }
+            return;
+        }
+
+        if (kind === 'stochastic') {
+            if (slideIndex === 0) {
+                switch (selectedInput) {
+                    case 0:
+                        adjustStochasticMin(direction * finalMagnitude);
+                        break;
+                    case 1:
+                        adjustStochasticMax(direction * finalMagnitude);
+                        break;
+                    case 2:
+                        adjustStochasticChangeProb(direction * finalMagnitude);
+                        break;
+                }
+                return;
+            }
+
+            return;
+        }
+
+        if (kind === 'delay') {
+            if (slideIndex === 0) {
+                switch (selectedInput) {
+                    case 0:
+                        adjustDelayTime(direction * finalMagnitude);
+                        break;
+                    case 1:
+                        adjustDelayFeedback(direction * finalMagnitude);
+                        break;
+                    case 2:
+                        adjustDelayMix(direction * finalMagnitude);
+                        break;
+                }
+                return;
+            }
+
+            return;
+        }
+
+        if (kind === 'reverb') {
+            if (slideIndex === 0) {
+                switch (selectedInput) {
+                    case 0:
+                        adjustReverbRoomSize(direction * finalMagnitude);
+                        break;
+                    case 1:
+                        adjustReverbDecay(direction * finalMagnitude);
+                        break;
+                    case 2:
+                        adjustReverbMix(direction * finalMagnitude);
+                        break;
+                    case 3:
+                        adjustReverbPreDelay(direction * finalMagnitude);
+                        break;
+                }
+                return;
+            }
+
+            return;
+        }
+
         if (slideIndex === 0) {
             switch (selectedInput) {
                 case 0:
-                    incrementSelectedStep(direction);
+                    incrementSelectedStep(direction * finalMagnitude);
                     break;
                 case 1:
                     setStepActive(direction > 0);
                     break;
                 case 2:
-                    adjustStepDuration(direction);
+                    adjustStepDuration(direction * finalMagnitude);
                     break;
                 case 3:
-                    adjustStepProbability(direction);
+                    adjustStepProbability(direction * finalMagnitude);
                     break;
             }
             return;
@@ -449,7 +978,7 @@
 
         switch (selectedInput) {
             case 0:
-                adjustPatternLength(direction);
+                adjustPatternLength(direction * finalMagnitude);
                 break;
             case 1:
                 cycleClock(direction);

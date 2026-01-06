@@ -54,50 +54,123 @@ graph TB
 
 | Store | Purpose | Scope | Persisted? |
 |-------|---------|-------|------------|
-| `sequencer.ts` | Step pattern editor state | Current lane | Via sync |
-| `melody.ts` | Bar sequence editor state | Current lane | Via sync |
-| `synth.ts` | Synth parameter editor | Current lane | Via sync |
-| `transport.ts` | BPM value | Global | Yes (in project) |
-| `playback.ts` | UI playback indicators | Global | No |
-| `navigation.ts` | UI section/slide scroll | Global | No |
-| `lanes.ts` | Lane list & selection | Global | Derived from projects |
-| `projects.ts` | All project data | Global | Yes (LocalStorage) |
-| `laneModuleSync.ts` | Editor ↔ project sync | Internal | No (logic only) |
+| `rhythm/stores/sequencer.ts` | XOX step pattern editor | Current lane | Via sync |
+| `rhythm/stores/euclidean.ts` | Euclidean pattern editor | Current lane | Via sync |
+| `rhythm/stores/m185.ts` | M185 entries editor | Current lane | Via sync |
+| `melody/stores/melody.ts` | Bar sequence editor | Current lane | Via sync |
+| `melody/stores/stochastic.ts` | Stochastic parameters editor | Current lane | Via sync |
+| `instrument/stores/synth.ts` | Synth parameter editor | Current lane | Via sync |
+| `effect/stores/delay.ts` | Delay effect parameters | Current lane | Via sync |
+| `effect/stores/reverb.ts` | Reverb effect parameters | Current lane | Via sync |
+| `core/stores/session/transport.ts` | BPM value | Global | Yes (in project) |
+| `core/stores/session/playback.ts` | UI playback indicators | Global | No |
+| `core/stores/session/navigation.ts` | UI section/slide scroll | Global | No |
+| `core/stores/session/lanes.ts` | Lane list & selection | Global | Derived from projects |
+| `core/stores/data/projects.ts` | All project data | Global | Yes (LocalStorage) |
+| `core/stores/sync/laneModuleSync.ts` | Module-aware editor ↔ project sync | Internal | No (logic only) |
 
 ## Editor Stores (Ephemeral)
 
-### sequencer.ts
+Editor stores are **module-specific** and represent the currently active lane only. The sync layer loads/saves the appropriate snapshot based on active module type.
 
-**Purpose**: Manage step-based rhythm pattern editing.
+### Rhythm Module Stores
 
-**State**:
+**rhythm/stores/sequencer.ts** (XOX Step Sequencer):
 ```typescript
 {
-  steps: StepState[64],           // Step grid
-  selectedStep: number,           // Currently selected step
+  steps: StepState[64],
+  selectedStep: number,
   sequencerSettings: {
-    length: number,               // 1-64
-    clockIndex: number,           // 0-3 (4n, 8n, 16n, 32n)
-    orderIndex: number            // 0-2 (forward, backward, random)
+    length: number,        // 1-64
+    clockIndex: number,    // 0-3
+    orderIndex: number     // 0-2
+  }
+}
+// Functions: toggleStepActive(), adjustStepDuration(), etc.
+```
+
+**rhythm/stores/euclidean.ts** (Euclidean Generator):
+```typescript
+{
+  euclideanSteps: number,      // 1-32
+  euclideanPulses: number,     // 0-32
+  euclideanRotation: number,   // 0-31
+  euclideanSettings: {
+    clockIndex: number
+  }
+}
+// Functions: adjustEuclideanSteps(), adjustEuclideanPulses(), etc.
+```
+
+**rhythm/stores/m185.ts** (M185 Sequencer):
+```typescript
+{
+  m185Entries: M185Entry[],
+  selectedEntry: number,
+  m185Settings: {
+    clockIndex: number
+  }
+}
+// Functions: selectEntry(), adjustEntryMode(), etc.
+```
+
+### Melody Module Stores
+
+**melody/stores/melody.ts** (Basic Melody):
+```typescript
+{
+  bars: BarState[32],
+  selectedBar: number,
+  melodySettings: {
+    length: number,
+    skipIndex: number,
+    orderIndex: number
+  }
+}
+// Functions: selectBar(), adjustBarNote(), toggleGlide(), etc.
+```
+
+**melody/stores/stochastic.ts** (Random Generator):
+```typescript
+{
+  stochasticMinNote: number,      // 0-7
+  stochasticMaxNote: number,      // 0-7
+  stochasticChangeProb: number,   // 0-100
+  stochasticCurrentNote: number,
+  stochasticSettings: {
+    clockIndex: number
+  }
+}
+// Functions: adjustStochasticMinNote(), adjustStochasticChangeProb(), etc.
+```
+
+### Instrument & Effect Stores
+
+**instrument/stores/synth.ts**:
+```typescript
+{
+  synthSettings: {
+    wave: WaveType,
+    harmonicity: number,
+    modulationIndex: number,
+    envelope: { attack, decay, sustain, release },
+    portamento: number
   }
 }
 ```
 
-**Key Functions**:
+**effect/stores/delay.ts** & **effect/stores/reverb.ts**:
 ```typescript
-selectStep(index: number)
-toggleStepActive(index?: number)
-adjustStepDuration(delta: number)
-adjustStepProbability(delta: number)
-setPatternLength(length: number)
-setClockSubdivision(index: number)
-setStepOrder(index: number)
+// Delay
+{ delayTime, delayFeedback, delayMix }
+// Reverb
+{ reverbRoomSize, reverbDecay, reverbMix, reverbPreDelay }
 ```
 
-**Derived Stores**:
-```typescript
-activeStep      // Current step being edited
-stepOrderLabel  // "Forward" | "Backward" | "Random"
+**Snapshot Pattern**: All stores provide:
+- `get{Module}Snapshot()` - Capture current state
+- `load{Module}Snapshot()` - Apply saved state
+- `create{Module}Snapshot()` - Generate defaults
 clockLabel      // "1/4" | "1/8" | "1/16" | "1/32"
 ```
 

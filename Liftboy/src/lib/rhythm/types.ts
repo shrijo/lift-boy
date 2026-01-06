@@ -42,3 +42,46 @@ export interface SequencerSnapshot {
   steps: StepState[];
   settings: SequencerSettings;
 }
+
+/**
+ * Euclidean rhythm sequencer snapshot
+ */
+export interface EuclideanSnapshot {
+  steps: number;
+  pulses: number;
+  rotation: number;
+  settings: {
+    clockIndex: number;
+    orderIndex: number;
+  };
+}
+
+/**
+ * M185 sequence entry play mode
+ * - repeat: Trigger note and repeat for 'steps' times
+ * - hold: Trigger note with duration of 'steps' beats
+ * - skip: Skip 'steps' without triggering
+ */
+export type M185Mode = "repeat" | "hold" | "skip";
+
+/**
+ * Individual M185 sequence entry
+ */
+export interface M185Entry {
+  id: number;
+  steps: number;
+  mode: M185Mode;
+}
+
+/**
+ * M185 sequencer snapshot
+ */
+export interface M185Snapshot {
+  entries: M185Entry[];
+  selectedEntry: number;
+  settings: {
+    length: number;
+    clockIndex: number;
+    orderIndex: number;
+  };
+}

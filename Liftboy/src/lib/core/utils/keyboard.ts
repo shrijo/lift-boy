@@ -29,15 +29,18 @@ export type KeyboardEventType =
   | "clear-input-selection"
   | "adjust-input-up"
   | "adjust-input-down"
+  | "increment-input"
   | "select-bpm"
   | "clear-bpm-selection"
   | "adjust-bpm-up"
   | "adjust-bpm-down"
-  | "toggle-playback";
+  | "toggle-playback"
+  | "open-module-selector";
 
 export interface KeyboardEventDetail {
   type: KeyboardEventType;
   inputIndex?: number;
+  magnitude?: number;
 }
 
 const EVENT_NAME = "keyboard-control";
@@ -48,14 +51,17 @@ const keyMap: Record<string, KeyboardEventType> = {
   ArrowRight: "scroll-next-slide",
 };
 
+const TAP_THRESHOLD_MS = 200; // Time threshold for tap vs hold
+
 let isInitialized = false;
 let activeInputIndex: number | null = null;
 let bpmSelected = false;
+let keyPressTimestamps: Map<string, number> = new Map();
 
-function emit(type: KeyboardEventType, inputIndex?: number) {
+function emit(type: KeyboardEventType, inputIndex?: number, magnitude?: number) {
   window.dispatchEvent(
     new CustomEvent<KeyboardEventDetail>(EVENT_NAME, {
-      detail: { type, inputIndex },
+      detail: { type, inputIndex, magnitude },
     })
   );
 }
@@ -88,8 +94,20 @@ function handleKeyDown(event: KeyboardEvent) {
     return;
   }
 
+  if (event.key === "l" || event.key === "L") {
+    emit("open-module-selector");
+    event.preventDefault();
+    return;
+  }
+
   if (event.key >= "1" && event.key <= "4") {
     const pressedIndex = Number(event.key) - 1;
+
+    // Track press time for tap detection
+    if (!keyPressTimestamps.has(event.key)) {
+      keyPressTimestamps.set(event.key, Date.now());
+    }
+
     if (activeInputIndex !== pressedIndex) {
       activeInputIndex = pressedIndex;
       emit("select-input", activeInputIndex);
@@ -119,16 +137,20 @@ function handleKeyDown(event: KeyboardEvent) {
   if (!action) return;
 
   const isVertical = event.key === "ArrowUp" || event.key === "ArrowDown";
+  const isHorizontal = event.key === "ArrowLeft" || event.key === "ArrowRight";
+  const magnitude = 1; // All arrows use 1x increment
+
   if (bpmSelected && isVertical) {
     emit(event.key === "ArrowUp" ? "adjust-bpm-up" : "adjust-bpm-down");
     event.preventDefault();
     return;
   }
-  if (activeInputIndex !== null && isVertical) {
-    emit(
-      event.key === "ArrowUp" ? "adjust-input-up" : "adjust-input-down",
-      activeInputIndex
-    );
+  if (activeInputIndex !== null && (isVertical || isHorizontal)) {
+    const eventType =
+      event.key === "ArrowUp" || event.key === "ArrowRight"
+        ? "adjust-input-up"
+        : "adjust-input-down";
+    emit(eventType, activeInputIndex, magnitude);
     event.preventDefault();
     return;
   }
@@ -140,6 +162,18 @@ function handleKeyDown(event: KeyboardEvent) {
 function handleKeyUp(event: KeyboardEvent) {
   if (event.key >= "1" && event.key <= "4") {
     const releasedIndex = Number(event.key) - 1;
+    const pressTime = keyPressTimestamps.get(event.key);
+    const duration = pressTime ? Date.now() - pressTime : 0;
+
+    // Check if it was a quick tap (not a hold)
+    if (duration > 0 && duration < TAP_THRESHOLD_MS && activeInputIndex === releasedIndex) {
+      // Quick tap - increment the value
+      emit("increment-input", releasedIndex);
+    }
+
+    // Clean up
+    keyPressTimestamps.delete(event.key);
+
     if (activeInputIndex === releasedIndex) {
       activeInputIndex = null;
       emit("clear-input-selection");
@@ -168,6 +202,7 @@ export function destroyKeyboardControls() {
   window.removeEventListener("keyup", handleKeyUp);
   activeInputIndex = null;
   bpmSelected = false;
+  keyPressTimestamps.clear();
   isInitialized = false;
 }
 

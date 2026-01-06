@@ -14,7 +14,7 @@ export interface SlideData {
   inputs: SlideInput[];
 }
 
-export type SectionKind = "xox" | "melody" | "synth";
+export type SectionKind = "xox" | "melody" | "synth" | "kick" | "hihat" | "snare" | "conga" | "clap" | "euclidean" | "m185" | "stochastic" | "delay" | "reverb" | "none";
 export type InputKind = SectionKind | "lane";
 
 export interface SectionData {

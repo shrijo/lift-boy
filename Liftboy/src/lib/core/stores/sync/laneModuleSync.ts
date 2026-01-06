@@ -44,6 +44,80 @@ import {
   loadSynthState,
   createSynthSnapshot,
 } from "../../../instrument/stores/synth";
+import {
+  kickSettings,
+  getKickSnapshot,
+  loadKickSnapshot,
+  createKickSnapshot,
+} from "../../../instrument/stores/kick";
+import {
+  hihatSettings,
+  getHihatSnapshot,
+  loadHihatSnapshot,
+  createHihatSnapshot,
+} from "../../../instrument/stores/hihat";
+import {
+  snareSettings,
+  getSnareSnapshot,
+  loadSnareSnapshot,
+  createSnareSnapshot,
+} from "../../../instrument/stores/snare";
+import {
+  congaSettings,
+  getCongaSnapshot,
+  loadCongaSnapshot,
+  createCongaSnapshot,
+} from "../../../instrument/stores/conga";
+import {
+  clapSettings,
+  getClapSnapshot,
+  loadClapSnapshot,
+  createClapSnapshot,
+} from "../../../instrument/stores/clap";
+import {
+  euclideanSteps,
+  euclideanPulses,
+  euclideanRotation,
+  euclideanSettings,
+  getEuclideanSnapshot,
+  loadEuclideanSnapshot,
+  createEuclideanSnapshot,
+} from "../../../rhythm/stores/euclidean";
+import {
+  m185Entries,
+  selectedEntry as m185SelectedEntry,
+  m185Settings,
+  getM185Snapshot,
+  loadM185Snapshot,
+  createM185Snapshot,
+} from "../../../rhythm/stores/m185";
+import {
+  stochasticMinNote,
+  stochasticMaxNote,
+  stochasticChangeProb,
+  stochasticCurrentNote,
+  stochasticSettings,
+  getStochasticSnapshot,
+  loadStochasticSnapshot,
+  createStochasticSnapshot,
+} from "../../../melody/stores/stochastic";
+import {
+  delayTime,
+  delayFeedback,
+  delayMix,
+  getDelaySnapshot,
+  loadDelaySnapshot,
+  createDelaySnapshot,
+} from "../../../effect/stores/delay";
+import {
+  reverbRoomSize,
+  reverbDecay,
+  reverbMix,
+  reverbPreDelay,
+  getReverbSnapshot,
+  loadReverbSnapshot,
+  createReverbSnapshot,
+} from "../../../effect/stores/reverb";
 import type { SequencerSnapshot } from "../../../rhythm/stores/sequencer";
 import type { MelodySnapshot } from "../../../melody/stores/melody";
 import type { SynthState } from "../../../instrument/stores/synth";
@@ -86,6 +160,28 @@ export function initLaneModuleSync() {
   ensureLaneSnapshots(activeLaneIndex);
   applyLaneState(activeLaneIndex);
 
+  // Track module definition IDs to detect changes
+  let previousModuleIds = getModuleIds(activeLaneIndex);
+
+  // Subscribe to lane changes to detect module definition updates
+  lanes.subscribe((laneList) => {
+    const currentModuleIds = getModuleIds(activeLaneIndex);
+
+    // Check if any module definition changed on the active lane
+    if (
+      activeLaneIndex !== null &&
+      previousModuleIds &&
+      currentModuleIds &&
+      hasModuleChanged(previousModuleIds, currentModuleIds)
+    ) {
+      // Module definition changed - reload editor stores
+      ensureLaneSnapshots(activeLaneIndex);
+      applyLaneState(activeLaneIndex);
+    }
+
+    previousModuleIds = currentModuleIds;
+  });
+
   selectedLaneIndex.subscribe((nextIndex) => {
     const target = sanitizeIndex(nextIndex);
     if (target === activeLaneIndex) return;
@@ -93,6 +189,7 @@ export function initLaneModuleSync() {
     activeLaneIndex = target;
     ensureLaneSnapshots(activeLaneIndex);
     applyLaneState(activeLaneIndex);
+    previousModuleIds = getModuleIds(activeLaneIndex);
   });
 
   const handleRhythmChange = () => {
@@ -112,9 +209,33 @@ export function initLaneModuleSync() {
 
   steps.subscribe(handleRhythmChange);
   sequencerSettings.subscribe(handleRhythmChange);
+  euclideanSteps.subscribe(handleRhythmChange);
+  euclideanPulses.subscribe(handleRhythmChange);
+  euclideanRotation.subscribe(handleRhythmChange);
+  euclideanSettings.subscribe(handleRhythmChange);
+  m185Entries.subscribe(handleRhythmChange);
+  m185SelectedEntry.subscribe(handleRhythmChange);
+  m185Settings.subscribe(handleRhythmChange);
   bars.subscribe(handleMelodyChange);
   melodySettings.subscribe(handleMelodyChange);
+  stochasticMinNote.subscribe(handleMelodyChange);
+  stochasticMaxNote.subscribe(handleMelodyChange);
+  stochasticChangeProb.subscribe(handleMelodyChange);
+  stochasticCurrentNote.subscribe(handleMelodyChange);
+  stochasticSettings.subscribe(handleMelodyChange);
   synthSettings.subscribe(handleSynthChange);
+  kickSettings.subscribe(handleSynthChange);
+  hihatSettings.subscribe(handleSynthChange);
+  snareSettings.subscribe(handleSynthChange);
+  congaSettings.subscribe(handleSynthChange);
+  clapSettings.subscribe(handleSynthChange);
+  delayTime.subscribe(handleSynthChange);
+  delayFeedback.subscribe(handleSynthChange);
+  delayMix.subscribe(handleSynthChange);
+  reverbRoomSize.subscribe(handleSynthChange);
+  reverbDecay.subscribe(handleSynthChange);
+  reverbMix.subscribe(handleSynthChange);
+  reverbPreDelay.subscribe(handleSynthChange);
 }
 
 /**
@@ -135,9 +256,52 @@ function persistLaneState(index: number | null) {
   if (index === null) return;
   const laneList = get(lanes);
   if (!laneList[index]) return;
-  updateModuleState(index, "rhythm", getSequencerSnapshot());
-  updateModuleState(index, "melody", getMelodySnapshot());
-  updateModuleState(index, "instrument", getSynthState());
+  const lane = laneList[index];
+
+  // Save rhythm module state based on active module type
+  const rhythmId = lane.modules.rhythm?.definitionId;
+  if (rhythmId === "rhythm.euclidean") {
+    updateModuleState(index, "rhythm", getEuclideanSnapshot());
+  } else if (rhythmId === "rhythm.m185") {
+    updateModuleState(index, "rhythm", getM185Snapshot());
+  } else {
+    // Default: XOX sequencer
+    updateModuleState(index, "rhythm", getSequencerSnapshot());
+  }
+
+  // Save melody module state based on active module type
+  const melodyId = lane.modules.melody?.definitionId;
+  if (melodyId === "melody.stochastic") {
+    updateModuleState(index, "melody", getStochasticSnapshot());
+  } else {
+    // Default: Basic melody
+    updateModuleState(index, "melody", getMelodySnapshot());
+  }
+
+  // Save instrument state based on active module type
+  const instrumentId = lane.modules.instrument?.definitionId;
+  if (instrumentId === "instrument.kick") {
+    updateModuleState(index, "instrument", getKickSnapshot());
+  } else if (instrumentId === "instrument.hihat") {
+    updateModuleState(index, "instrument", getHihatSnapshot());
+  } else if (instrumentId === "instrument.snare") {
+    updateModuleState(index, "instrument", getSnareSnapshot());
+  } else if (instrumentId === "instrument.conga") {
+    updateModuleState(index, "instrument", getCongaSnapshot());
+  } else if (instrumentId === "instrument.clap") {
+    updateModuleState(index, "instrument", getClapSnapshot());
+  } else {
+    // Default: Simple synth
+    updateModuleState(index, "instrument", getSynthState());
+  }
+
+  // Save effect states (delay and reverb both stored in effect module)
+  // Note: Currently only one effect module per lane is supported
+  if (lane.modules.effect?.definitionId === "effect.delay") {
+    updateModuleState(index, "effect", getDelaySnapshot());
+  } else if (lane.modules.effect?.definitionId === "effect.reverb") {
+    updateModuleState(index, "effect", getReverbSnapshot());
+  }
 }
 
 /**
@@ -161,16 +325,67 @@ function applyLaneState(index: number | null) {
   const lane = getLane(index);
   if (!lane) return;
   isApplying = true;  // Set guard before loading
+
   const rhythmState = lane.modules.rhythm?.state;
+  const rhythmId = lane.modules.rhythm?.definitionId;
   const melodyState = lane.modules.melody?.state;
+  const melodyId = lane.modules.melody?.definitionId;
   const synthState = lane.modules.instrument?.state;
-  loadSequencerSnapshot(
-    isSequencerSnapshot(rhythmState) ? rhythmState : createSequencerSnapshot()
-  );
-  loadMelodySnapshot(
-    isMelodySnapshot(melodyState) ? melodyState : createMelodySnapshot()
-  );
-  loadSynthState(isSynthState(synthState) ? synthState : createSynthSnapshot());
+  const effectState = lane.modules.effect?.state;
+  const effectId = lane.modules.effect?.definitionId;
+
+  // Load rhythm module state based on active module type
+  if (rhythmId === "rhythm.euclidean") {
+    loadEuclideanSnapshot(
+      isEuclideanSnapshot(rhythmState) ? rhythmState : createEuclideanSnapshot()
+    );
+  } else if (rhythmId === "rhythm.m185") {
+    loadM185Snapshot(
+      isM185Snapshot(rhythmState) ? rhythmState : createM185Snapshot()
+    );
+  } else {
+    // Default: XOX sequencer
+    loadSequencerSnapshot(
+      isSequencerSnapshot(rhythmState) ? rhythmState : createSequencerSnapshot()
+    );
+  }
+
+  // Load melody module state based on active module type
+  if (melodyId === "melody.stochastic") {
+    loadStochasticSnapshot(
+      isStochasticSnapshot(melodyState) ? melodyState : createStochasticSnapshot()
+    );
+  } else {
+    // Default: Basic melody
+    loadMelodySnapshot(
+      isMelodySnapshot(melodyState) ? melodyState : createMelodySnapshot()
+    );
+  }
+
+  // Load instrument state based on active module type
+  const instrumentId = lane.modules.instrument?.definitionId;
+  if (instrumentId === "instrument.kick") {
+    loadKickSnapshot(isKickState(synthState) ? synthState : createKickSnapshot());
+  } else if (instrumentId === "instrument.hihat") {
+    loadHihatSnapshot(isHihatState(synthState) ? synthState : createHihatSnapshot());
+  } else if (instrumentId === "instrument.snare") {
+    loadSnareSnapshot(isSnareState(synthState) ? synthState : createSnareSnapshot());
+  } else if (instrumentId === "instrument.conga") {
+    loadCongaSnapshot(isCongaState(synthState) ? synthState : createCongaSnapshot());
+  } else if (instrumentId === "instrument.clap") {
+    loadClapSnapshot(isClapState(synthState) ? synthState : createClapSnapshot());
+  } else {
+    // Default: Simple synth
+    loadSynthState(isSynthState(synthState) ? synthState : createSynthSnapshot());
+  }
+
+  // Load effect state based on active effect module
+  if (effectId === "effect.delay") {
+    loadDelaySnapshot(isDelaySnapshot(effectState) ? effectState : createDelaySnapshot());
+  } else if (effectId === "effect.reverb") {
+    loadReverbSnapshot(isReverbSnapshot(effectState) ? effectState : createReverbSnapshot());
+  }
+
   isApplying = false;  // Clear guard after loading
 }
 
@@ -279,4 +494,161 @@ function isSynthState(value: unknown): value is Partial<SynthState> {
   if ("release" in obj && typeof obj.release !== "number") return false;
 
   return true;
+}
+
+function isDelaySnapshot(value: unknown): value is ReturnType<typeof createDelaySnapshot> {
+  if (typeof value !== "object" || value === null) return false;
+
+  const obj = value as Record<string, unknown>;
+
+  return (
+    typeof obj.time === "number" &&
+    typeof obj.feedback === "number" &&
+    typeof obj.mix === "number"
+  );
+}
+
+function isReverbSnapshot(value: unknown): value is ReturnType<typeof createReverbSnapshot> {
+  if (typeof value !== "object" || value === null) return false;
+
+  const obj = value as Record<string, unknown>;
+
+  return (
+    typeof obj.roomSize === "number" &&
+    typeof obj.decay === "number" &&
+    typeof obj.mix === "number" &&
+    typeof obj.preDelay === "number"
+  );
+}
+
+interface ModuleIds {
+  rhythm?: string;
+  melody?: string;
+  instrument?: string;
+  effect?: string;
+}
+
+function getModuleIds(index: number | null): ModuleIds | null {
+  const lane = getLane(index);
+  if (!lane) return null;
+
+  return {
+    rhythm: lane.modules.rhythm?.definitionId,
+    melody: lane.modules.melody?.definitionId,
+    instrument: lane.modules.instrument?.definitionId,
+    effect: lane.modules.effect?.definitionId,
+  };
+}
+
+function hasModuleChanged(prev: ModuleIds, current: ModuleIds): boolean {
+  return (
+    prev.rhythm !== current.rhythm ||
+    prev.melody !== current.melody ||
+    prev.instrument !== current.instrument ||
+    prev.effect !== current.effect
+  );
+}
+
+function isEuclideanSnapshot(value: unknown): value is ReturnType<typeof createEuclideanSnapshot> {
+  if (typeof value !== "object" || value === null) return false;
+
+  const obj = value as Record<string, unknown>;
+
+  return (
+    typeof obj.steps === "number" &&
+    typeof obj.pulses === "number" &&
+    typeof obj.rotation === "number" &&
+    typeof obj.settings === "object" &&
+    obj.settings !== null
+  );
+}
+
+function isM185Snapshot(value: unknown): value is ReturnType<typeof createM185Snapshot> {
+  if (typeof value !== "object" || value === null) return false;
+
+  const obj = value as Record<string, unknown>;
+
+  return (
+    Array.isArray(obj.entries) &&
+    typeof obj.selectedEntry === "number" &&
+    typeof obj.settings === "object" &&
+    obj.settings !== null
+  );
+}
+
+function isStochasticSnapshot(value: unknown): value is ReturnType<typeof createStochasticSnapshot> {
+  if (typeof value !== "object" || value === null) return false;
+
+  const obj = value as Record<string, unknown>;
+
+  return (
+    typeof obj.minNote === "number" &&
+    typeof obj.maxNote === "number" &&
+    typeof obj.changeProb === "number" &&
+    typeof obj.currentNote === "number" &&
+    typeof obj.settings === "object" &&
+    obj.settings !== null
+  );
+}
+
+function isKickState(value: unknown): value is ReturnType<typeof createKickSnapshot> {
+  if (typeof value !== "object" || value === null) return false;
+
+  const obj = value as Record<string, unknown>;
+
+  return (
+    typeof obj.pitch === "number" &&
+    typeof obj.pitchDecay === "number" &&
+    typeof obj.tone === "number" &&
+    typeof obj.decay === "number"
+  );
+}
+
+function isHihatState(value: unknown): value is ReturnType<typeof createHihatSnapshot> {
+  if (typeof value !== "object" || value === null) return false;
+
+  const obj = value as Record<string, unknown>;
+
+  return (
+    typeof obj.tone === "number" &&
+    typeof obj.decay === "number" &&
+    typeof obj.resonance === "number"
+  );
+}
+
+function isSnareState(value: unknown): value is ReturnType<typeof createSnareSnapshot> {
+  if (typeof value !== "object" || value === null) return false;
+
+  const obj = value as Record<string, unknown>;
+
+  return (
+    typeof obj.tone === "number" &&
+    typeof obj.snap === "number" &&
+    typeof obj.decay === "number"
+  );
+}
+
+function isCongaState(value: unknown): value is ReturnType<typeof createCongaSnapshot> {
+  if (typeof value !== "object" || value === null) return false;
+
+  const obj = value as Record<string, unknown>;
+
+  return (
+    typeof obj.pitch === "number" &&
+    typeof obj.pitchDecay === "number" &&
+    typeof obj.tone === "number" &&
+    typeof obj.decay === "number"
+  );
+}
+
+function isClapState(value: unknown): value is ReturnType<typeof createClapSnapshot> {
+  if (typeof value !== "object" || value === null) return false;
+
+  const obj = value as Record<string, unknown>;
+
+  return (
+    typeof obj.tone === "number" &&
+    typeof obj.decay === "number" &&
+    typeof obj.spread === "number"
+  );
 }

@@ -2,8 +2,19 @@
   import { onMount, onDestroy, afterUpdate } from 'svelte';
   import { get } from 'svelte/store';
   import XoxSequencer from '../../../rhythm/components/XoxSequencer.svelte';
+  import EuclideanSequencer from '../../../rhythm/components/EuclideanSequencer.svelte';
+  import M185Sequencer from '../../../rhythm/components/M185Sequencer.svelte';
   import MelodySequencer from '../../../melody/components/MelodySequencer.svelte';
+  import StochasticSequencer from '../../../melody/components/StochasticSequencer.svelte';
   import SimpleSynth from '../../../instrument/components/SimpleSynth.svelte';
+  import KickDrum from '../../../instrument/components/KickDrum.svelte';
+  import HihatDrum from '../../../instrument/components/HihatDrum.svelte';
+  import SnareDrum from '../../../instrument/components/SnareDrum.svelte';
+  import CongaDrum from '../../../instrument/components/CongaDrum.svelte';
+  import ClapDrum from '../../../instrument/components/ClapDrum.svelte';
+  import DelayEffect from '../../../effect/components/DelayEffect.svelte';
+  import ReverbEffect from '../../../effect/components/ReverbEffect.svelte';
+  import NoneEffect from '../../../effect/components/NoneEffect.svelte';
   import { onKeyboardEvent, type KeyboardEventDetail } from '../../utils/keyboard';
   import type { SectionData } from '../../types/types';
   import { scrollToIndex, createScrollDebouncer } from '../../utils/scrolling';
@@ -26,8 +37,19 @@
   export let sections: SectionData[] = [];
   const componentByKind = {
     xox: XoxSequencer,
+    euclidean: EuclideanSequencer,
+    m185: M185Sequencer,
     melody: MelodySequencer,
+    stochastic: StochasticSequencer,
     synth: SimpleSynth,
+    kick: KickDrum,
+    hihat: HihatDrum,
+    snare: SnareDrum,
+    conga: CongaDrum,
+    clap: ClapDrum,
+    delay: DelayEffect,
+    reverb: ReverbEffect,
+    none: NoneEffect,
   } as const;
 
   let laneElement: HTMLDivElement | null = null;

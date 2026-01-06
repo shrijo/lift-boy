@@ -15,6 +15,7 @@ import { getModuleDefinition } from "../../../modules/registry";
 import { createSequencerSnapshot } from "../../../rhythm/stores/sequencer";
 import { createMelodySnapshot } from "../../../melody/stores/melody";
 import { createSynthSnapshot } from "../../../instrument/stores/synth";
+import { createDelaySnapshot } from "../../../effect/stores/delay";
 
 const DEFAULT_TEMPO = 120;
 const DEFAULT_LANE_NAME = "Lane";
@@ -192,6 +193,7 @@ function createLaneTemplate(order: number): Lane {
   const rhythmState = createSequencerSnapshot();
   const melodyState = createMelodySnapshot();
   const synthState = createSynthSnapshot();
+  const delayState = createDelaySnapshot();
   return normalizeLane(
     {
       id: createId("lane"),
@@ -201,7 +203,7 @@ function createLaneTemplate(order: number): Lane {
         rhythm: createModuleInstance("rhythm.xox-basic", rhythmState),
         melody: createModuleInstance("melody.melody-basic", melodyState),
         instrument: createModuleInstance("instrument.synth-simple", synthState),
-        effect: createModuleInstance("effect.none"),
+        effect: createModuleInstance("effect.delay", delayState),
       },
       mixer: {
         volume: 0.8,

@@ -51,3 +51,16 @@ export interface MelodySnapshot {
   bars: BarState[];
   settings: MelodySettings;
 }
+
+/**
+ * Stochastic melody sequencer snapshot
+ */
+export interface StochasticSnapshot {
+  minNote: number;
+  maxNote: number;
+  changeProb: number;
+  currentNote: number;
+  settings: {
+    orderIndex: number;
+  };
+}
